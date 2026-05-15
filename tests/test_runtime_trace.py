@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
+from memfs_doctor.core.events import EventKind
+from memfs_doctor.runtime.letta_structured import emit_structured_retrieval, emit_structured_retrieval_miss
 from memfs_doctor.runtime.letta_runtime import (
+    AGENT_ID_ENV,
+    SESSION_ID_ENV,
+    STRUCTURED_TRACE_PATH_ENV,
     RecordedLine,
     default_runtime_trace_path,
+    default_structured_trace_path,
     default_transcript_path,
     drop_pre_resume_output,
     infer_runtime_events_from_turns,
     InteractiveRuntimeRecorder,
+    load_structured_runtime_events,
+    merge_runtime_events,
     normalize_response_lines,
     parse_transcript_turns,
     write_raw_transcript,
@@ -220,6 +229,98 @@ class RuntimeTraceTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].kind.value, "memory_retrieval_miss")
         self.assertEqual(events[0].query, "my height is ?")
+
+    def test_loads_structured_runtime_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = default_structured_trace_path(Path(tmpdir), "session-001")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "kind": "memory_retrieved",
+                        "query": "what car do i have",
+                        "memory_id": "system/human.md",
+                        "related_memory_ids": ["mem-2"],
+                        "latency_ms": 42.0,
+                        "tokens_loaded": 12,
+                        "score": 0.93,
+                        "metadata": {"used": True, "stale": False},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            events = load_structured_runtime_events(path, agent_id="agent-001", session_id="session-001")
+
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].kind.value, "memory_retrieved")
+            self.assertEqual(events[0].memory_id, "system/human.md")
+            self.assertEqual(events[0].tokens_loaded, 12)
+
+    def test_structured_runtime_events_override_heuristic_duplicates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            heuristic = [
+                infer_runtime_events_from_turns(
+                    parse_transcript_turns(
+                        [
+                            RecordedLine("2026-05-15T10:00:00+00:00", "> what car do i have"),
+                            RecordedLine("2026-05-15T10:00:00.250000+00:00", "• Honda."),
+                        ]
+                    ),
+                    agent_id="agent-001",
+                    session_id="session-001",
+                )[0]
+            ]
+            path = Path(tmpdir) / "structured.jsonl"
+            path.write_text(
+                json.dumps(
+                    {
+                        "kind": "memory_retrieved",
+                        "query": "what car do i have",
+                        "memory_id": "system/human.md",
+                        "latency_ms": 21.0,
+                        "tokens_loaded": 18,
+                        "score": 0.97,
+                        "metadata": {"used": True, "structured": True},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            structured = load_structured_runtime_events(path, agent_id="agent-001", session_id="session-001")
+
+            merged = merge_runtime_events(heuristic, structured)
+
+            self.assertEqual(len(merged), 1)
+            self.assertEqual(merged[0].memory_id, "system/human.md")
+            self.assertEqual(merged[0].tokens_loaded, 18)
+
+    def test_emits_structured_retrieval_helpers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "structured.jsonl"
+            old_env = {
+                STRUCTURED_TRACE_PATH_ENV: os.environ.get(STRUCTURED_TRACE_PATH_ENV),
+                AGENT_ID_ENV: os.environ.get(AGENT_ID_ENV),
+                SESSION_ID_ENV: os.environ.get(SESSION_ID_ENV),
+            }
+            os.environ[STRUCTURED_TRACE_PATH_ENV] = str(path)
+            os.environ[AGENT_ID_ENV] = "agent-001"
+            os.environ[SESSION_ID_ENV] = "session-001"
+            try:
+                emit_structured_retrieval(query="what car do i have", memory_id="system/human.md", score=0.91)
+                emit_structured_retrieval_miss(query="what is my height", reason="no_relevant_memory")
+            finally:
+                for key, value in old_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+            payloads = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(len(payloads), 2)
+            self.assertEqual(payloads[0]["kind"], EventKind.MEMORY_RETRIEVED.value)
+            self.assertEqual(payloads[1]["kind"], EventKind.MEMORY_RETRIEVAL_MISS.value)
 
 
 if __name__ == "__main__":

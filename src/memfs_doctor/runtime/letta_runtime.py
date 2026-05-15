@@ -21,6 +21,11 @@ from typing import Any
 from memfs_doctor.core.events import EventKind, MemoryEvent, utc_now_iso
 
 
+STRUCTURED_TRACE_PATH_ENV = "MEMFS_DOCTOR_STRUCTURED_TRACE_PATH"
+CAPTURE_ID_ENV = "MEMFS_DOCTOR_CAPTURE_ID"
+AGENT_ID_ENV = "MEMFS_DOCTOR_AGENT_ID"
+SESSION_ID_ENV = "MEMFS_DOCTOR_SESSION_ID"
+
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 PROMPT_RE = re.compile(r"[›>]\s+(.*\S)\s*$")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
@@ -97,6 +102,10 @@ def default_runtime_trace_path(workspace_root: Path, capture_id: str) -> Path:
 
 def default_transcript_path(workspace_root: Path, capture_id: str) -> Path:
     return workspace_root / ".memfs_doctor" / "transcripts" / f"{capture_id}.log"
+
+
+def default_structured_trace_path(workspace_root: Path, capture_id: str) -> Path:
+    return workspace_root / ".memfs_doctor" / "runtime" / f"{capture_id}.structured.jsonl"
 
 
 def sanitize_terminal_line(text: str) -> str:
@@ -288,15 +297,15 @@ class InteractiveRuntimeRecorder:
         self._stdin_buffer = ""
         self.lines: list[RecordedLine] = []
 
-    def run(self, command: list[str]) -> tuple[int, list[RecordedLine]]:
+    def run(self, command: list[str], env: dict[str, str] | None = None) -> tuple[int, list[RecordedLine]]:
         if not command:
             raise ValueError("Command is required.")
         executable = command[0]
         if not shutil.which(executable) and not Path(executable).exists():
             raise FileNotFoundError(f"Command not found: {executable}")
-        return self._run_with_pty(command)
+        return self._run_with_pty(command, env=env)
 
-    def _run_with_pty(self, command: list[str]) -> tuple[int, list[RecordedLine]]:
+    def _run_with_pty(self, command: list[str], env: dict[str, str] | None = None) -> tuple[int, list[RecordedLine]]:
         master_fd, slave_fd = pty.openpty()
         self._apply_terminal_size(slave_fd)
 
@@ -306,6 +315,7 @@ class InteractiveRuntimeRecorder:
             stdout=slave_fd,
             stderr=slave_fd,
             close_fds=True,
+            env={**os.environ, **(env or {})},
         )
         os.close(slave_fd)
 
@@ -412,6 +422,49 @@ def write_raw_transcript(path: str | Path, lines: list[RecordedLine]) -> Path:
     return transcript_path
 
 
+def load_structured_runtime_events(path: str | Path, *, agent_id: str, session_id: str) -> list[MemoryEvent]:
+    trace_path = Path(path)
+    if not trace_path.exists():
+        return []
+
+    events: list[MemoryEvent] = []
+    with trace_path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            raw = line.strip()
+            if not raw:
+                continue
+            payload = json.loads(raw)
+            payload.setdefault("event_id", f"{session_id}:structured:{line_number}")
+            payload.setdefault("framework", "letta")
+            payload["agent_id"] = payload.get("agent_id") or agent_id
+            payload["session_id"] = payload.get("session_id") or session_id
+            payload.setdefault("source", "letta-structured-runtime")
+            events.append(MemoryEvent.from_dict(payload))
+    return events
+
+
+def merge_runtime_events(heuristic_events: list[MemoryEvent], structured_events: list[MemoryEvent]) -> list[MemoryEvent]:
+    if not structured_events:
+        return heuristic_events
+
+    merged: list[MemoryEvent] = list(structured_events)
+    structured_signatures = {
+        (event.kind.value, normalize_query(event.query))
+        for event in structured_events
+        if event.query
+    }
+    for event in heuristic_events:
+        signature = (event.kind.value, normalize_query(event.query))
+        if event.query and signature in structured_signatures:
+            continue
+        merged.append(event)
+    return sorted(merged, key=lambda event: (event.timestamp, event.event_id))
+
+
+def normalize_query(query: str | None) -> str:
+    return " ".join((query or "").strip().lower().split())
+
+
 def record_runtime_trace(
     *,
     agent_id: str,
@@ -419,11 +472,23 @@ def record_runtime_trace(
     command: list[str],
     output_path: str | Path,
     transcript_path: str | Path,
+    structured_trace_path: str | Path | None = None,
 ) -> tuple[int, Path, Path, list[MemoryEvent]]:
     recorder = InteractiveRuntimeRecorder()
-    exit_code, lines = recorder.run(command)
+    structured_path = Path(structured_trace_path) if structured_trace_path else default_structured_trace_path(Path.cwd(), session_id)
+    exit_code, lines = recorder.run(
+        command,
+        env={
+            STRUCTURED_TRACE_PATH_ENV: str(structured_path),
+            CAPTURE_ID_ENV: session_id,
+            AGENT_ID_ENV: agent_id,
+            SESSION_ID_ENV: session_id,
+        },
+    )
     turns = parse_transcript_turns(lines)
-    events = infer_runtime_events_from_turns(turns, agent_id=agent_id, session_id=session_id)
+    heuristic_events = infer_runtime_events_from_turns(turns, agent_id=agent_id, session_id=session_id)
+    structured_events = load_structured_runtime_events(structured_path, agent_id=agent_id, session_id=session_id)
+    events = merge_runtime_events(heuristic_events, structured_events)
     path = write_runtime_trace(output_path, events)
     raw_path = write_raw_transcript(transcript_path, lines)
     return exit_code, path, raw_path, events

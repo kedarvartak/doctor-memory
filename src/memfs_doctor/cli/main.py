@@ -18,7 +18,12 @@ from memfs_doctor.reports.render import (
     render_retrieval_inspection,
     render_sessions,
 )
-from memfs_doctor.runtime.letta_runtime import default_runtime_trace_path, default_transcript_path, record_runtime_trace
+from memfs_doctor.runtime.letta_runtime import (
+    default_runtime_trace_path,
+    default_structured_trace_path,
+    default_transcript_path,
+    record_runtime_trace,
+)
 from memfs_doctor.storage.sqlite import SQLiteEventStore
 
 
@@ -57,6 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     record_letta_runtime.add_argument(
         "--trace-path",
         help="Optional output path for the runtime JSONL trace. Defaults to .memfs_doctor/runtime/<capture-id>.jsonl",
+    )
+    record_letta_runtime.add_argument(
+        "--structured-trace-path",
+        help="Optional structured retrieval sidecar path. Defaults to .memfs_doctor/runtime/<capture-id>.structured.jsonl",
     )
     record_letta_runtime.add_argument(
         "--auto-finish",
@@ -238,6 +247,11 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         command = ["letta"]
 
     output_path = Path(args.trace_path) if args.trace_path else default_runtime_trace_path(Path.cwd(), capture.capture_id)
+    structured_trace_path = (
+        Path(args.structured_trace_path)
+        if args.structured_trace_path
+        else default_structured_trace_path(Path.cwd(), capture.capture_id)
+    )
     transcript_path = default_transcript_path(Path.cwd(), capture.capture_id)
     exit_code, trace_path, raw_transcript_path, events = record_runtime_trace(
         agent_id=capture.agent_id,
@@ -245,6 +259,7 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         command=command,
         output_path=output_path,
         transcript_path=transcript_path,
+        structured_trace_path=structured_trace_path,
     )
     print(f"\nWrote raw transcript to {raw_transcript_path}")
     print(f"Wrote runtime trace to {trace_path} with {len(events)} inferred events.")
