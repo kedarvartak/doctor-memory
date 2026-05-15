@@ -6,7 +6,7 @@ from pathlib import Path
 
 from memfs_doctor.adapters.letta import LettaTraceAdapter
 from memfs_doctor.core.metrics import compute_metrics
-from memfs_doctor.core.replay import diff_steps, replay_session
+from memfs_doctor.core.replay import diff_steps, inspect_step, replay_session
 from memfs_doctor.storage.sqlite import SQLiteEventStore
 
 
@@ -27,9 +27,20 @@ class WorkflowTests(unittest.TestCase):
         replay = replay_session(events)
         self.assertEqual(replay.issue_first_seen["duplicate"], 4)
         self.assertEqual(replay.issue_first_seen["contradiction"], 6)
+        self.assertEqual(replay.final_snapshot_memory_count, 3)
+        self.assertEqual(replay.timeline[3].flags, ["first_duplicate"])
+        self.assertEqual(replay.timeline[5].flags, ["first_contradiction"])
 
         diff = diff_steps(events, 2, 6)
         self.assertIn("mem-003", diff["created"])
+        self.assertIn("mem-001", diff["updated"])
+        self.assertIn("details", diff)
+
+        step = inspect_step(events, 5)
+        self.assertEqual(step.step, 5)
+        self.assertEqual(step.delta_from_previous["updated"], ["mem-001"])
+        self.assertIn("mem-001", step.snapshot)
+        self.assertEqual(step.summary, "updated mem-001")
 
     def test_sqlite_round_trip(self) -> None:
         adapter = LettaTraceAdapter()
@@ -51,4 +62,3 @@ class WorkflowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -4,7 +4,7 @@ import json
 
 from memfs_doctor.core.events import SessionRecord
 from memfs_doctor.core.metrics import MetricsReport
-from memfs_doctor.core.replay import ReplayResult
+from memfs_doctor.core.replay import ReplayResult, StepInspection
 from memfs_doctor.core.retrievals import RetrievalInspectionReport
 from memfs_doctor.core.reporting import ComparisonReport, HealthReport
 
@@ -42,14 +42,44 @@ def render_metrics(report: MetricsReport, as_json: bool = False) -> str:
 
 
 def render_replay(result: ReplayResult) -> str:
+    if not result.timeline:
+        return "No replayable events found."
     lines = [
         f"Session: {result.session_id}",
         f"Total steps: {result.total_steps}",
         f"First duplicate event: {result.issue_first_seen['duplicate'] or '-'}",
         f"First contradiction event: {result.issue_first_seen['contradiction'] or '-'}",
+        f"Final memory count: {result.final_snapshot_memory_count}",
         "Timeline:",
     ]
-    lines.extend(result.timeline)
+    for entry in result.timeline:
+        flag_suffix = f" flags={','.join(entry.flags)}" if entry.flags else ""
+        query_suffix = f" query={entry.query!r}" if entry.query else ""
+        lines.append(
+            f"{entry.step:03d} {entry.timestamp} {entry.kind} memory={entry.memory_id or '-'} "
+            f"snapshot={entry.snapshot_memory_count} {entry.summary}{query_suffix}{flag_suffix}"
+        )
+    return "\n".join(lines)
+
+
+def render_step_inspection(result: StepInspection, as_json: bool = False) -> str:
+    if as_json:
+        return json.dumps(result.to_dict(), indent=2, sort_keys=True)
+
+    delta = result.delta_from_previous
+    lines = [
+        f"Session: {result.session_id}",
+        f"Step: {result.step}/{result.total_steps}",
+        f"Summary: {result.summary}",
+        f"Flags: {', '.join(result.flags) if result.flags else '-'}",
+        f"Snapshot size: {len(result.snapshot)}",
+        "Delta from previous step:",
+        f"- created: {', '.join(delta['created']) if delta['created'] else '-'}",
+        f"- updated: {', '.join(delta['updated']) if delta['updated'] else '-'}",
+        f"- deleted: {', '.join(delta['deleted']) if delta['deleted'] else '-'}",
+        "Event:",
+        json.dumps(result.event, indent=2, sort_keys=True),
+    ]
     return "\n".join(lines)
 
 

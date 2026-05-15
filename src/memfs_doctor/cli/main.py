@@ -7,7 +7,7 @@ import sys
 
 from memfs_doctor.adapters.letta import LettaTraceAdapter
 from memfs_doctor.core.metrics import compute_metrics
-from memfs_doctor.core.replay import diff_steps, replay_session
+from memfs_doctor.core.replay import diff_steps, inspect_step, replay_session
 from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
 from memfs_doctor.core.reporting import HealthReport, compare_reports, default_thresholds, evaluate_thresholds, export_report
 from memfs_doctor.reports.render import (
@@ -16,6 +16,7 @@ from memfs_doctor.reports.render import (
     render_metrics,
     render_replay,
     render_retrieval_inspection,
+    render_step_inspection,
     render_sessions,
 )
 from memfs_doctor.runtime.letta_runtime import (
@@ -123,11 +124,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     replay_cmd = subparsers.add_parser("replay", help="Replay a session timeline.")
     replay_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
+    replay_cmd.add_argument("--trace-path", help="Optional trace file path for offline replay instead of a stored session.")
+    replay_cmd.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework for --trace-path.")
+    replay_cmd.add_argument("--json", action="store_true", help="Render replay as JSON.")
+
+    step_cmd = subparsers.add_parser("inspect-step", help="Inspect a specific replay step and memory state.")
+    step_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
+    step_cmd.add_argument("--trace-path", help="Optional trace file path for offline step inspection.")
+    step_cmd.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework for --trace-path.")
+    step_cmd.add_argument("--step", required=True, type=int, help="1-based replay step number.")
+    step_cmd.add_argument("--json", action="store_true", help="Render inspection as JSON.")
 
     diff_cmd = subparsers.add_parser("diff", help="Diff memory state between two replay steps.")
-    diff_cmd.add_argument("--session", required=True, help="Session identifier.")
+    diff_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session unless --trace-path is used.")
+    diff_cmd.add_argument("--trace-path", help="Optional trace file path for offline diffing.")
+    diff_cmd.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework for --trace-path.")
     diff_cmd.add_argument("--before-step", required=True, type=int)
     diff_cmd.add_argument("--after-step", required=True, type=int)
+    diff_cmd.add_argument("--json", action="store_true", help="Render diff as JSON.")
 
     return parser
 
@@ -311,6 +325,23 @@ def _require_session_events(store: SQLiteEventStore, session_id: str):
     return events
 
 
+def _load_events_for_replay(
+    store: SQLiteEventStore,
+    *,
+    session_id: str | None,
+    trace_path: str | None,
+    framework: str,
+):
+    if trace_path:
+        adapter = _load_adapter(framework)
+        events = adapter.load_events(trace_path)
+        if not events:
+            raise SystemExit(f"No events found in trace file {trace_path!r}")
+        return events
+    resolved_session_id = _resolve_session_id(store, session_id)
+    return _require_session_events(store, resolved_session_id)
+
+
 def cmd_inspect(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
     resolved_session_id = _resolve_session_id(store, args.session)
@@ -383,15 +414,40 @@ def cmd_inspect_retrieval(args: argparse.Namespace) -> int:
 
 def cmd_replay(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
-    resolved_session_id = _resolve_session_id(store, args.session)
-    events = _require_session_events(store, resolved_session_id)
-    print(render_replay(replay_session(events)))
+    events = _load_events_for_replay(
+        store,
+        session_id=args.session,
+        trace_path=args.trace_path,
+        framework=args.framework,
+    )
+    replay = replay_session(events)
+    if args.json:
+        print(json.dumps(replay.to_dict(), indent=2, sort_keys=True))
+        return 0
+    print(render_replay(replay))
+    return 0
+
+
+def cmd_inspect_step(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    events = _load_events_for_replay(
+        store,
+        session_id=args.session,
+        trace_path=args.trace_path,
+        framework=args.framework,
+    )
+    print(render_step_inspection(inspect_step(events, args.step), as_json=args.json))
     return 0
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
-    events = _require_session_events(store, args.session)
+    events = _load_events_for_replay(
+        store,
+        session_id=args.session,
+        trace_path=args.trace_path,
+        framework=args.framework,
+    )
     print(json.dumps(diff_steps(events, args.before_step, args.after_step), indent=2, sort_keys=True))
     return 0
 
@@ -416,6 +472,7 @@ def main(argv: list[str] | None = None) -> int:
         "compare-sessions": cmd_compare_sessions,
         "inspect-retrieval": cmd_inspect_retrieval,
         "replay": cmd_replay,
+        "inspect-step": cmd_inspect_step,
         "diff": cmd_diff,
     }
     return command_map[args.command](args)

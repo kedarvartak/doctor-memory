@@ -504,6 +504,50 @@ Expected result:
 Pass condition:
 - a developer can explain a specific recall using the inspection output without manually reconstructing the full timeline
 
+### Manual Test 14: Phase 5 Session Replay And Step Diff
+
+Goal:
+- replay a session deterministically, inspect a specific step, and diff memory state between two steps
+
+Suggested setup:
+1. use an existing stored Letta session with at least one create and one update event
+2. or ingest `examples/letta_session.jsonl` into a scratch database
+3. run replay for the whole session
+4. inspect one middle step where memory changed
+5. diff an earlier step against a later step
+6. repeat the replay directly from the trace file to confirm offline behavior
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main replay \
+  --session <session-id>
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main inspect-step \
+  --session <session-id> \
+  --step <step-number> \
+  --json
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main diff \
+  --session <session-id> \
+  --before-step <earlier-step> \
+  --after-step <later-step> \
+  --json
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main replay \
+  --trace-path examples/letta_session.jsonl \
+  --json
+```
+
+Expected result:
+- replay output includes ordered steps, first duplicate/contradiction markers, and final memory count
+- step inspection includes the event payload, snapshot at that point, and delta from the previous step
+- diff output includes `created`, `updated`, `deleted`, and per-memory `details`
+- offline replay from `--trace-path` produces the same timeline shape as the stored session replay
+
+Pass condition:
+- a developer can jump to a step, see memory state at that point, and explain what changed without manually replaying the full session
+
 ## Manual Test Notes Template
 
 Use this template after each manual run:

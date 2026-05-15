@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/CLI-First-1F2937" alt="CLI First">
   <img src="https://img.shields.io/badge/SQLite-Trace%20Store-003B57?logo=sqlite&logoColor=white" alt="SQLite Trace Store">
   <img src="https://img.shields.io/badge/Letta-Adapter%20First-0F766E" alt="Letta Adapter First">
-  <img src="https://img.shields.io/badge/Status-Phase%204%20Implemented-15803D" alt="Status Phase 4 Implemented">
+  <img src="https://img.shields.io/badge/Status-Phase%205%20Implemented-15803D" alt="Status Phase 5 Implemented">
 </p>
 
 <p align="center">
@@ -89,6 +89,8 @@ These metrics are designed to run on stored traces, not only live sessions. That
 - health reports with threshold findings
 - baseline-versus-candidate session comparison
 - retrieval-path inspection and problematic recall surfacing
+- step-by-step memory replay and snapshot diff inspection
+- offline replay from stored trace files without the SQLite store
 - JSON export suitable for downstream automation
 
 ## Who This Is For
@@ -239,8 +241,7 @@ The project has completed the first reporting-oriented milestone needed to make 
 - Phase 2: Letta adapter MVP and capture workflow
 - Phase 3: metrics, health reports, and session comparison
 - Phase 4: retrieval explainability and causal recall inspection
-
-Next focus areas in the roadmap include retrieval explainability and richer replay analysis.
+- Phase 5: replay engine, step inspection, and offline snapshot diffing
 
 For details, see:
 

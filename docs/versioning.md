@@ -216,3 +216,23 @@ Reason:
 Next:
 - Improve causality by attaching framework-native retrieval ranking metadata when available.
 - Add richer noisy-recall heuristics that incorporate post-retrieval agent behavior, not only retrieval metadata.
+
+## 2026-05-16 | v0.4.0-phase5-memory-replay
+
+Type: feature
+Summary: Completed the first replay-oriented debugging layer with step inspection, richer snapshot diffs, and offline replay from trace files.
+
+Changes:
+- Expanded `memfs_doctor.core.replay` with structured replay timeline entries, step inspection, richer diff output, and final snapshot summary fields.
+- Added `inspect-step` CLI command for step-by-step memory state inspection.
+- Extended `replay` and `diff` to work directly from trace files through `--trace-path`, not only from stored sessions.
+- Updated replay renderers and automated tests to cover timeline flags, snapshot deltas, and offline replay parity.
+- Added a dedicated Phase 5 manual validation scenario to `docs/testing.md`.
+
+Reason:
+- Phase 5 requires deterministic session replay, timeline traversal, step inspection, and understandable before/after memory diffs.
+- Developers needed an offline replay path that does not depend on the SQLite event store.
+
+Next:
+- Add more compact terminal rendering for large snapshots and diffs.
+- Introduce exportable replay artifacts if teams want to persist replay views separately from raw events.
