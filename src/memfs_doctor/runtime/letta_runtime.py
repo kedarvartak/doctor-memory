@@ -22,6 +22,7 @@ from memfs_doctor.core.events import EventKind, MemoryEvent, utc_now_iso
 
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+PROMPT_RE = re.compile(r"[›>]\s+(.*\S)\s*$")
 QUESTION_PREFIXES = (
     "what ",
     "where ",
@@ -46,6 +47,16 @@ MISS_PATTERNS = (
     "don't have that information",
     "i don't have that information",
     "want to tell me",
+)
+STATUS_ONLY_PREFIXES = (
+    "letta code is remembering",
+    "resuming conversation with letta code",
+)
+STATUS_LINE_PREFIXES = STATUS_ONLY_PREFIXES + (
+    "└  tip:",
+    "tip:",
+    "press / for commands",
+    "press ctrl-c again to exit",
 )
 
 
@@ -84,28 +95,49 @@ def is_question(text: str) -> bool:
 def parse_transcript_turns(lines: list[RecordedLine]) -> list[TranscriptTurn]:
     turns: list[TranscriptTurn] = []
     current: TranscriptTurn | None = None
+    pending_query: tuple[str, str] | None = None
 
     for recorded in lines:
         raw = sanitize_terminal_line(recorded.text).strip()
         if not raw:
             continue
-        if raw.startswith("> "):
-            current = TranscriptTurn(query=raw[2:].strip(), query_timestamp=recorded.timestamp)
-            turns.append(current)
+        prompt_match = PROMPT_RE.search(raw)
+        if prompt_match:
+            prompt_text = prompt_match.group(1).strip()
+            if prompt_text:
+                if current is not None:
+                    current = None
+                pending_query = (prompt_text, recorded.timestamp)
             continue
-        if current is None:
+        if raw.startswith(("✻ Thinking", "* Thinking")):
+            if current is None and pending_query is not None:
+                current = TranscriptTurn(query=pending_query[0], query_timestamp=pending_query[1])
+                turns.append(current)
+                pending_query = None
             continue
-        if raw.startswith("* Thinking"):
-            continue
-        if raw.startswith("memory "):
+        if raw.startswith(("• memory ", "memory ")):
+            if current is None and pending_query is not None:
+                current = TranscriptTurn(query=pending_query[0], query_timestamp=pending_query[1])
+                turns.append(current)
+                pending_query = None
+            if current is None:
+                continue
             if current.response_timestamp is None:
                 current.response_timestamp = recorded.timestamp
-            current.memory_lines.append(raw)
+            current.memory_lines.append(raw.replace("• ", "", 1))
             continue
         if raw.startswith("• "):
+            if current is None and pending_query is not None:
+                current = TranscriptTurn(query=pending_query[0], query_timestamp=pending_query[1])
+                turns.append(current)
+                pending_query = None
+            if current is None:
+                continue
             if current.response_timestamp is None:
                 current.response_timestamp = recorded.timestamp
             current.response_lines.append(raw[2:].strip())
+            continue
+        if current is None:
             continue
         if current.response_lines:
             current.response_lines.append(raw)
@@ -127,7 +159,10 @@ def infer_runtime_events_from_turns(
     for turn in turns:
         if not is_question(turn.query):
             continue
-        response_text = "\n".join(turn.response_lines).strip()
+        filtered_response_lines = [line for line in turn.response_lines if not is_status_response_line(line)]
+        response_text = "\n".join(filtered_response_lines).strip()
+        if not response_text or is_status_only_response(response_text):
+            continue
         miss = any(pattern in response_text.lower() for pattern in MISS_PATTERNS)
         kind = EventKind.MEMORY_RETRIEVAL_MISS if miss else EventKind.MEMORY_RETRIEVED
         latency_ms = None
@@ -155,6 +190,16 @@ def infer_runtime_events_from_turns(
             )
         )
     return events
+
+
+def is_status_only_response(text: str) -> bool:
+    normalized = text.strip().lower()
+    return any(normalized.startswith(prefix) for prefix in STATUS_ONLY_PREFIXES)
+
+
+def is_status_response_line(text: str) -> bool:
+    normalized = text.strip().lower()
+    return any(normalized.startswith(prefix) for prefix in STATUS_LINE_PREFIXES)
 
 
 def write_runtime_trace(path: str | Path, events: list[MemoryEvent]) -> Path:

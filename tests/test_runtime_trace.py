@@ -68,10 +68,10 @@ class RuntimeTraceTests(unittest.TestCase):
         recorder._record_stdin_bytes(b"What is my favorite dessert?")
         recorder._record_stdin_bytes(b"\n")
 
-        turns = parse_transcript_turns(recorder.lines)
-        self.assertEqual(len(turns), 2)
-        self.assertEqual(turns[0].query, "What is my favorite tea?")
-        self.assertEqual(turns[1].query, "What is my favorite dessert?")
+        texts = [line.text for line in recorder.lines]
+        self.assertEqual(len(texts), 2)
+        self.assertEqual(texts[0], "> What is my favorite tea?")
+        self.assertEqual(texts[1], "> What is my favorite dessert?")
 
     def test_raw_transcript_writer_outputs_lines(self) -> None:
         lines = [
@@ -84,6 +84,61 @@ class RuntimeTraceTests(unittest.TestCase):
             text = written.read_text(encoding="utf-8")
             self.assertIn("What is my favorite tea?", text)
             self.assertIn("Masala chai.", text)
+
+    def test_parses_real_letta_prompt_redraws(self) -> None:
+        lines = [
+            RecordedLine("2026-05-15T15:37:14.431155+00:00", "       › which phone do i have"),
+            RecordedLine("2026-05-15T15:37:14.431191+00:00", "       ✻ Thinking…"),
+            RecordedLine("2026-05-15T15:37:14.431255+00:00", "       • iPhone 15."),
+            RecordedLine("2026-05-15T15:37:14.431364+00:00", "       › What is my favorite dessert?"),
+            RecordedLine("2026-05-15T15:37:14.431401+00:00", "       ✻ Thinking…"),
+            RecordedLine(
+                "2026-05-15T15:37:14.431458+00:00",
+                "       • Still don't know that one. You didn't tell me last time either — want to?",
+            ),
+            RecordedLine("2026-05-15T15:37:14.431491+00:00", "       › actually, my current phone is iphone 17"),
+            RecordedLine(
+                "2026-05-15T15:37:14.431524+00:00",
+                '       • memory "Update phone from iPhone 15 to iPhone 17 per user\'s correction" in',
+            ),
+            RecordedLine("2026-05-15T15:37:14.431650+00:00", "       • Updated. iPhone 17."),
+            RecordedLine("2026-05-15T15:37:14.431684+00:00", "       › what is my phone model rn"),
+            RecordedLine("2026-05-15T15:37:14.431719+00:00", "       ✻ Thinking…"),
+            RecordedLine("2026-05-15T15:37:14.431773+00:00", "       • iPhone 17."),
+        ]
+
+        turns = parse_transcript_turns(lines)
+        events = infer_runtime_events_from_turns(
+            turns,
+            agent_id="agent-001",
+            session_id="session-001",
+        )
+
+        self.assertEqual(len(events), 3)
+        self.assertEqual(events[0].kind.value, "memory_retrieved")
+        self.assertEqual(events[1].kind.value, "memory_retrieval_miss")
+        self.assertEqual(events[2].kind.value, "memory_retrieved")
+
+    def test_ignores_status_only_duplicate_before_real_answer(self) -> None:
+        lines = [
+            RecordedLine("2026-05-15T15:50:37.438511+00:00", "› what is my surname"),
+            RecordedLine("2026-05-15T15:50:37.452399+00:00", "• Letta Code is remembering… (esc to interrupt)"),
+            RecordedLine("2026-05-15T15:50:37.463792+00:00", "› what is my surname"),
+            RecordedLine("2026-05-15T15:50:37.463891+00:00", "• Letta Code is remembering… (esc to interrupt)"),
+            RecordedLine("2026-05-15T15:50:49.092979+00:00", "✻ Thinking…"),
+            RecordedLine("2026-05-15T15:50:49.530604+00:00", "• Damian."),
+        ]
+
+        turns = parse_transcript_turns(lines)
+        events = infer_runtime_events_from_turns(
+            turns,
+            agent_id="agent-001",
+            session_id="session-001",
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind.value, "memory_retrieved")
+        self.assertEqual(events[0].query, "what is my surname")
 
 
 if __name__ == "__main__":
