@@ -16,6 +16,22 @@ It does not yet schedule auto-healing, benchmark publishing, visual graph explor
 - Normalize framework data into a common event schema.
 - Start CLI-first before investing in a full dashboard UI.
 - Prioritize debuggability and correctness over breadth.
+- Treat tests as phase gates: no implementation step is complete until automated checks pass and a matching manual validation path exists.
+
+## Test Gate
+
+Every phase in this roadmap is blocked on verification.
+
+Required before moving ahead:
+
+- automated tests for the affected area are added or updated
+- relevant test commands pass locally
+- manual test steps are documented for the changed workflow
+- results are logged in the implementation summary
+
+Reference:
+
+- see `docs/testing.md` for the evolving automated and manual test matrix
 
 ## Phase 0: Documentation And Architecture Baseline
 

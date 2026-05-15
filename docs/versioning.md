@@ -76,3 +76,22 @@ Next:
 - Expand the Letta adapter beyond file import into real session discovery and trace capture.
 - Add richer retrieval tracing so replay can explain why recalls happened and whether they were useful.
 - Introduce report export and regression comparison support for session-to-session observability workflows.
+
+## 2026-05-15 | v0.1.2-testing-gate
+
+Type: test
+Summary: Added explicit automated and manual test gate documentation so implementation cannot advance without verification.
+
+Changes:
+- Created `docs/testing.md` with the project-wide verification policy, baseline automated commands, and a manual Letta validation matrix.
+- Added roadmap language making tests a formal phase gate rather than an optional follow-up task.
+- Updated `README.md` to point contributors to the testing workflow.
+- Defined concrete manual Letta scenarios for baseline, duplicate memory, contradiction, and retrieval miss behavior.
+
+Reason:
+- The project needs a repeatable engineering workflow where every implementation step proves correctness before the next phase starts.
+- Memory systems need both synthetic automated tests and real-session manual checks to validate that metrics and replay outputs are directionally trustworthy.
+
+Next:
+- Keep `docs/testing.md` in sync with each new feature and adapter capability.
+- Add feature-specific automated tests as retrieval tracing and regression reporting are implemented.

@@ -10,6 +10,13 @@ Current implementation focus:
 - deterministic session replay
 - Letta-first adapter scaffolding
 
+## Testing
+
+Testing is a project gate, not a cleanup step after the fact.
+
+- automated and manual validation expectations live in `docs/testing.md`
+- every implementation step should add or update tests before we move ahead
+
 ## Quick Start
 
 ```bash
