@@ -25,6 +25,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("sessions", help="List captured sessions.")
 
+    subparsers.add_parser("letta-agents", help="List local Letta agents discovered under ~/.letta/agents.")
+
+    ingest_letta_agent = subparsers.add_parser(
+        "ingest-letta-agent",
+        help="Ingest events reconstructed from a local Letta MemFS git repository.",
+    )
+    ingest_letta_agent.add_argument("--agent", help="Letta agent identifier under ~/.letta/agents.")
+    ingest_letta_agent.add_argument("--memory-dir", help="Explicit path to a Letta memory directory.")
+
     inspect_cmd = subparsers.add_parser("inspect", help="Inspect a session and basic event info.")
     inspect_cmd.add_argument("--session", required=True, help="Session identifier.")
 
@@ -73,6 +82,36 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 def cmd_sessions(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
     print(render_sessions(store.list_sessions()))
+    return 0
+
+
+def cmd_letta_agents(args: argparse.Namespace) -> int:
+    del args
+    adapter = LettaTraceAdapter()
+    agents = adapter.discover_agents()
+    if not agents:
+        print("No local Letta agents found.")
+        return 0
+    for agent in agents:
+        print(f"{agent.agent_id} memory_dir={agent.memory_dir}")
+    return 0
+
+
+def cmd_ingest_letta_agent(args: argparse.Namespace) -> int:
+    if not args.agent and not args.memory_dir:
+        raise SystemExit("Provide --agent <id> or --memory-dir <path>.")
+
+    store = _store_from_args(args)
+    store.init_db()
+    adapter = LettaTraceAdapter()
+    if args.memory_dir:
+        events = adapter.load_events_from_memory_repo(args.memory_dir)
+        target = args.memory_dir
+    else:
+        events = adapter.load_events_from_agent(args.agent)
+        target = args.agent
+    count = store.ingest_events(events)
+    print(f"Ingested {count} events from Letta memory source {target}")
     return 0
 
 
@@ -131,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
         "init-db": cmd_init_db,
         "ingest": cmd_ingest,
         "sessions": cmd_sessions,
+        "letta-agents": cmd_letta_agents,
+        "ingest-letta-agent": cmd_ingest_letta_agent,
         "inspect": cmd_inspect,
         "metrics": cmd_metrics,
         "replay": cmd_replay,
@@ -141,4 +182,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

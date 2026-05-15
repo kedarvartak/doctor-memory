@@ -9,6 +9,8 @@ Current implementation focus:
 - metrics for memory health
 - deterministic session replay
 - Letta-first adapter scaffolding
+- local Letta agent discovery
+- git-history import from real Letta MemFS repos
 
 ## Testing
 
@@ -21,6 +23,7 @@ Testing is a project gate, not a cleanup step after the fact.
 
 ```bash
 PYTHONPATH=src python3 -m memfs_doctor.cli.main --help
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
 ```
 
 ## Example Flow
@@ -31,6 +34,15 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main ingest examples/letta_session.js
 PYTHONPATH=src python3 -m memfs_doctor.cli.main inspect --session session-001
 PYTHONPATH=src python3 -m memfs_doctor.cli.main metrics --session session-001
 PYTHONPATH=src python3 -m memfs_doctor.cli.main replay --session session-001
+```
+
+## Local Letta Import
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-letta.db init-db
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-letta.db ingest-letta-agent --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-letta.db sessions
 ```
 
 ## Current State

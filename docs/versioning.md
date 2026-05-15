@@ -95,3 +95,24 @@ Reason:
 Next:
 - Keep `docs/testing.md` in sync with each new feature and adapter capability.
 - Add feature-specific automated tests as retrieval tracing and regression reporting are implemented.
+
+## 2026-05-15 | v0.1.3-letta-local-import
+
+Type: feature
+Summary: Added real local Letta agent discovery and MemFS git-history import with test coverage and live verification.
+
+Changes:
+- Added Letta local state discovery for agents under `~/.letta/agents`.
+- Added `ingest-letta-agent` and `letta-agents` CLI commands.
+- Implemented git-history import from a Letta memory repo into normalized session events.
+- Added synthetic fixture tests for local discovery and git-backed memory mutation import.
+- Fixed a false-positive contradiction case by excluding markdown frontmatter metadata from semantic memory attributes.
+- Verified the importer against the real local agent `agent-9edb3aaa-735a-4db6-b9e0-dee86bcc8998` present on this machine.
+
+Reason:
+- File-based JSONL ingestion was not enough for meaningful Letta validation.
+- The project needed a bridge from real MemFS artifacts into the shared observability pipeline before deeper replay and retrieval analysis work.
+
+Next:
+- Add retrieval-aware capture beyond git history so reads, misses, and usefulness signals can be imported from real Letta activity.
+- Improve session modeling so repeated live imports can be compared over time rather than only by current git head state.

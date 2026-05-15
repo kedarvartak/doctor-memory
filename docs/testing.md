@@ -26,6 +26,7 @@ Run these after every meaningful implementation change unless a narrower command
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 PYTHONPATH=src python3 -m memfs_doctor.cli.main --help
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
 ```
 
 ### Current End-To-End CLI Check
@@ -50,6 +51,13 @@ For the sample Letta trace:
 - replay reports first duplicate event at step `4`
 - replay reports first contradiction event at step `6`
 - metrics returns non-zero duplicate and contradiction scores
+
+For the local Letta git-import path:
+
+- local Letta agents are listed when `~/.letta/agents` exists
+- `ingest-letta-agent` creates a synthetic session from MemFS git history
+- the imported session appears in `sessions`
+- imported metrics do not report false contradiction scores from markdown frontmatter alone
 
 ## Manual Test Policy
 
@@ -116,6 +124,17 @@ These should be run once Letta is accessible in the environment.
 Goal:
 - establish what healthy memory metrics look like over a normal session
 
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db init-db
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db ingest-letta-agent --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db sessions
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db replay --session <session-id>
+```
+
 Suggested Letta session flow:
 1. create or open a test agent
 2. tell the agent three stable facts:
@@ -143,6 +162,16 @@ Pass condition:
 Goal:
 - confirm that duplicate writes are visible in metrics and replay
 
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db init-db
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db ingest-letta-agent --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db sessions
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db replay --session <session-id>
+```
+
 Suggested Letta session flow:
 1. create or open a test agent
 2. store the same fact in slightly repeated form multiple times
@@ -166,6 +195,15 @@ Pass condition:
 
 Goal:
 - confirm that conflicting facts surface as contradiction risk
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db init-db
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db ingest-letta-agent --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db replay --session <session-id>
+```
 
 Suggested Letta session flow:
 1. create or open a test agent
@@ -205,6 +243,32 @@ Expected MemFS Doctor result:
 
 Pass condition:
 - the report reflects the retrieval miss in a visible way
+
+### Manual Test 7: Local Letta Discovery And Import
+
+Goal:
+- confirm that MemFS Doctor can discover a real local Letta agent and import its MemFS git history without hand-built trace files
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db init-db
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db ingest-letta-agent --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db sessions
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db replay --session <session-id>
+```
+
+Expected result:
+- at least one real local agent is listed when Letta has bootstrapped memory locally
+- import succeeds without requiring manual JSONL authoring
+- `sessions` shows a synthetic `letta-git:<agent-id>:<head>` session id
+- metrics output is stable and does not show false contradictions from frontmatter-only differences
+- replay shows a deterministic timeline of git-derived memory mutations
+
+Pass condition:
+- a real local MemFS repo can be discovered and imported end to end
 
 ## Manual Test Notes Template
 
