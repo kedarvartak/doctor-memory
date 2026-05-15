@@ -5,6 +5,7 @@ import json
 from memfs_doctor.core.events import SessionRecord
 from memfs_doctor.core.metrics import MetricsReport
 from memfs_doctor.core.replay import ReplayResult
+from memfs_doctor.core.retrievals import RetrievalInspectionReport
 from memfs_doctor.core.reporting import ComparisonReport, HealthReport
 
 
@@ -69,6 +70,14 @@ def render_health_report(report: HealthReport, as_json: bool = False) -> str:
         lines.append("Findings:")
         for finding in report.findings:
             lines.append(f"- [{finding.severity}] {finding.metric}: {finding.message}")
+    if report.problematic_recalls:
+        lines.append("Problematic recalls:")
+        for trace in report.problematic_recalls:
+            lines.append(
+                f"- step={trace.step} memory={trace.memory_id or '-'} stale={trace.stale} "
+                f"score={trace.score if trace.score is not None else '-'} tokens={trace.tokens_loaded or 0} "
+                f"query={trace.query!r}"
+            )
     return "\n".join(lines)
 
 
@@ -92,4 +101,42 @@ def render_comparison_report(report: ComparisonReport, as_json: bool = False) ->
             lines.append(
                 f"- {item['metric']}: baseline={item['baseline']} candidate={item['candidate']} delta={item['delta']}"
             )
+    return "\n".join(lines)
+
+
+def render_retrieval_inspection(report: RetrievalInspectionReport, as_json: bool = False) -> str:
+    if as_json:
+        return json.dumps(report.to_dict(), indent=2, sort_keys=True)
+
+    lines = [
+        f"Session: {report.session_id}",
+        f"Framework: {report.framework}",
+        f"Agent: {report.agent_id}",
+        f"Retrieval count: {report.retrieval_count}",
+        f"Miss count: {report.miss_count}",
+    ]
+    top_problematic = report.to_dict()["top_problematic_recalls"]
+    if top_problematic:
+        lines.append("Top problematic recalls:")
+        for item in top_problematic:
+            lines.append(
+                f"- step={item['step']} memory={item['memory_id'] or '-'} stale={item['stale']} "
+                f"score={item['score'] if item['score'] is not None else '-'} "
+                f"tokens={item['tokens_loaded'] or 0} query={item['query']!r}"
+            )
+    top_pressure = report.to_dict()["top_token_pressure_recalls"]
+    if top_pressure:
+        lines.append("Top token pressure recalls:")
+        for item in top_pressure:
+            lines.append(
+                f"- step={item['step']} memory={item['memory_id'] or '-'} "
+                f"tokens={item['tokens_loaded'] or 0} latency_ms={item['latency_ms'] or 0.0} query={item['query']!r}"
+            )
+    lines.append("Retrieval traces:")
+    for trace in report.traces:
+        lines.append(
+            f"- step={trace.step} kind={trace.kind} memory={trace.memory_id or '-'} "
+            f"cause_step={trace.cause_step or '-'} stale={trace.stale} "
+            f"likely_noisy={trace.likely_noisy} query={trace.query!r}"
+        )
     return "\n".join(lines)

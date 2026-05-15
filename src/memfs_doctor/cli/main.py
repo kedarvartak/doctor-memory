@@ -8,12 +8,14 @@ import sys
 from memfs_doctor.adapters.letta import LettaTraceAdapter
 from memfs_doctor.core.metrics import compute_metrics
 from memfs_doctor.core.replay import diff_steps, replay_session
+from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
 from memfs_doctor.core.reporting import HealthReport, compare_reports, default_thresholds, evaluate_thresholds, export_report
 from memfs_doctor.reports.render import (
     render_comparison_report,
     render_health_report,
     render_metrics,
     render_replay,
+    render_retrieval_inspection,
     render_sessions,
 )
 from memfs_doctor.runtime.letta_runtime import default_runtime_trace_path, default_transcript_path, record_runtime_trace
@@ -104,6 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
     compare_cmd.add_argument("--candidate", help="Candidate session identifier. Defaults to the latest stored session.")
     compare_cmd.add_argument("--json", action="store_true", help="Render comparison as JSON.")
     compare_cmd.add_argument("--out", help="Optional path to export the comparison JSON.")
+
+    retrieval_cmd = subparsers.add_parser("inspect-retrieval", help="Inspect retrieval causality and recall quality.")
+    retrieval_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
+    retrieval_cmd.add_argument("--step", type=int, help="Optional retrieval step to inspect as a single JSON object.")
+    retrieval_cmd.add_argument("--json", action="store_true", help="Render inspection as JSON.")
 
     replay_cmd = subparsers.add_parser("replay", help="Replay a session timeline.")
     replay_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
@@ -321,7 +328,8 @@ def _health_report_for_session(store: SQLiteEventStore, session_id: str) -> Heal
     events = _require_session_events(store, session_id)
     metrics = compute_metrics(events)
     findings = evaluate_thresholds(metrics, default_thresholds())
-    return HealthReport.from_metrics(metrics, findings)
+    retrievals = analyze_retrievals(events)
+    return HealthReport.from_metrics(metrics, findings, problematic_recalls=top_problematic_recalls(retrievals.traces))
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -343,6 +351,18 @@ def cmd_compare_sessions(args: argparse.Namespace) -> int:
     if args.out:
         export_report(args.out, comparison.to_dict())
     print(render_comparison_report(comparison, as_json=args.json))
+    return 0
+
+
+def cmd_inspect_retrieval(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    resolved_session_id = _resolve_session_id(store, args.session)
+    events = _require_session_events(store, resolved_session_id)
+    if args.step is not None:
+        trace = retrieval_trace_for_step(events, args.step)
+        print(json.dumps(trace.to_dict(), indent=2, sort_keys=True))
+        return 0
+    print(render_retrieval_inspection(analyze_retrievals(events), as_json=args.json))
     return 0
 
 
@@ -379,6 +399,7 @@ def main(argv: list[str] | None = None) -> int:
         "metrics": cmd_metrics,
         "report": cmd_report,
         "compare-sessions": cmd_compare_sessions,
+        "inspect-retrieval": cmd_inspect_retrieval,
         "replay": cmd_replay,
         "diff": cmd_diff,
     }

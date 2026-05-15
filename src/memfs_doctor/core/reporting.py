@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from memfs_doctor.core.metrics import MetricsReport
+from memfs_doctor.core.retrievals import RetrievalTrace
 
 
 WORSE_WHEN_HIGHER = {
@@ -48,9 +49,15 @@ class HealthReport:
     status: str
     metrics: dict[str, Any]
     findings: list[ThresholdFinding] = field(default_factory=list)
+    problematic_recalls: list[RetrievalTrace] = field(default_factory=list)
 
     @classmethod
-    def from_metrics(cls, metrics: MetricsReport, findings: list[ThresholdFinding]) -> "HealthReport":
+    def from_metrics(
+        cls,
+        metrics: MetricsReport,
+        findings: list[ThresholdFinding],
+        problematic_recalls: list[RetrievalTrace] | None = None,
+    ) -> "HealthReport":
         status = "healthy"
         if any(item.severity == "error" for item in findings):
             status = "error"
@@ -63,6 +70,7 @@ class HealthReport:
             status=status,
             metrics=dict(metrics.values),
             findings=findings,
+            problematic_recalls=list(problematic_recalls or []),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,6 +81,7 @@ class HealthReport:
             "status": self.status,
             "metrics": self.metrics,
             "findings": [item.to_dict() for item in self.findings],
+            "problematic_recalls": [item.to_dict() for item in self.problematic_recalls],
         }
 
 
@@ -194,4 +203,3 @@ def _compare(actual: float | int, operator: str, threshold: float | int) -> bool
     if operator == "<":
         return actual < threshold
     raise ValueError(f"Unsupported operator: {operator}")
-

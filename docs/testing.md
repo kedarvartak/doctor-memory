@@ -89,6 +89,13 @@ For the Phase 3 reporting path:
 - report output can be exported as JSON artifacts
 - comparison output should flag worsened metrics such as higher duplicate rate or higher empty retrieval rate
 
+For the Phase 4 retrieval explainability path:
+
+- `inspect-retrieval --session <id>` returns retrieval traces with cause linkage
+- `inspect-retrieval --session <id> --step <n>` returns the specific retrieval path for one timeline step
+- retrieval inspection surfaces likely noisy recalls and top token-pressure recalls
+- `report --session <id>` includes top problematic recalls when present
+
 ## Manual Test Policy
 
 Automated tests are necessary but not sufficient. For memory systems, manual tests should confirm that the metrics and replay outputs feel directionally correct against real agent behavior.
@@ -464,6 +471,38 @@ Expected result:
 
 Pass condition:
 - the comparison surfaces directionally correct regressions between two real Letta sessions
+
+### Manual Test 13: Phase 4 Retrieval Path Inspection
+
+Goal:
+- inspect why a retrieval happened, which memory was selected, and whether the recall looks useful or noisy
+
+Suggested setup:
+1. create a session with at least two stored facts and two recall questions
+2. include one healthy recall and one stale or low-confidence recall if possible
+3. finish the session through the runtime wrapper or merge a runtime trace into the bounded capture
+4. run retrieval inspection against the stored session
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+  --session <session-id> \
+  --json
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+  --session <session-id> \
+  --step <retrieval-step>
+```
+
+Expected result:
+- each retrieval trace contains the query, selected memory id, and retrieval timing fields when available
+- retrieval traces link back to the most recent causal memory write for the retrieved memory id
+- stale recalls appear under top problematic recalls
+- token-heavy recalls appear under top token pressure recalls
+
+Pass condition:
+- a developer can explain a specific recall using the inspection output without manually reconstructing the full timeline
 
 ## Manual Test Notes Template
 

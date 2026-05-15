@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/CLI-First-1F2937" alt="CLI First">
   <img src="https://img.shields.io/badge/SQLite-Trace%20Store-003B57?logo=sqlite&logoColor=white" alt="SQLite Trace Store">
   <img src="https://img.shields.io/badge/Letta-Adapter%20First-0F766E" alt="Letta Adapter First">
-  <img src="https://img.shields.io/badge/Status-Phase%203%20Implemented-15803D" alt="Status Phase 3 Implemented">
+  <img src="https://img.shields.io/badge/Status-Phase%204%20Implemented-15803D" alt="Status Phase 4 Implemented">
 </p>
 
 <p align="center">
@@ -88,6 +88,7 @@ These metrics are designed to run on stored traces, not only live sessions. That
 - Letta session capture and runtime recording support
 - health reports with threshold findings
 - baseline-versus-candidate session comparison
+- retrieval-path inspection and problematic recall surfacing
 - JSON export suitable for downstream automation
 
 ## Who This Is For
@@ -202,6 +203,22 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.d
 
 This is the core evaluation loop for the product. A healthy baseline and a stressed or modified candidate should produce directionally correct differences in metrics such as retrieval latency, empty retrieval rate, and memory churn.
 
+Inspect retrieval causality and recall quality for a stored session:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+  --session <session-id> \
+  --json
+```
+
+Inspect a single retrieval step:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+  --session <session-id> \
+  --step <retrieval-step>
+```
+
 ## Development Philosophy
 
 MemFS Doctor is being built with a narrow, deliberate scope:
@@ -221,6 +238,7 @@ The project has completed the first reporting-oriented milestone needed to make 
 - Phase 1: core event model and local storage
 - Phase 2: Letta adapter MVP and capture workflow
 - Phase 3: metrics, health reports, and session comparison
+- Phase 4: retrieval explainability and causal recall inspection
 
 Next focus areas in the roadmap include retrieval explainability and richer replay analysis.
 

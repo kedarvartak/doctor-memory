@@ -196,3 +196,23 @@ Reason:
 Next:
 - Add configurable threshold files rather than only built-in defaults.
 - Add non-zero exit behavior for failing report thresholds and regression checks in the next workflow-oriented phase.
+
+## 2026-05-15 | v0.3.0-phase4-retrieval-explainability
+
+Type: feature
+Summary: Implemented the first retrieval explainability layer with causal recall inspection and report-level problematic recall surfacing.
+
+Changes:
+- Added `memfs_doctor.core.retrievals` for retrieval-path analysis, causal write linkage, and token-pressure ranking.
+- Added `inspect-retrieval` CLI command for session-level and step-level retrieval inspection.
+- Extended health reports to include top problematic recalls.
+- Added automated tests for retrieval causality and explainability output.
+- Documented the manual validation path for retrieval inspection.
+
+Reason:
+- Phase 4 requires answering why a retrieval happened, what memory was selected, and whether a recall was stale or noisy.
+- Developers needed a retrieval-specific inspection workflow beyond aggregate health metrics.
+
+Next:
+- Improve causality by attaching framework-native retrieval ranking metadata when available.
+- Add richer noisy-recall heuristics that incorporate post-retrieval agent behavior, not only retrieval metadata.

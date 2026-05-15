@@ -14,6 +14,7 @@ from memfs_doctor.core.reporting import (
     evaluate_thresholds,
     export_report,
 )
+from memfs_doctor.core.retrievals import analyze_retrievals, top_problematic_recalls
 from memfs_doctor.adapters.letta import LettaLocalState, LettaTraceAdapter
 
 
@@ -27,10 +28,16 @@ class ReportingTests(unittest.TestCase):
         metrics = compute_metrics(events)
         thresholds = default_thresholds()
         findings = evaluate_thresholds(metrics, thresholds)
+        retrievals = analyze_retrievals(events)
 
-        report = HealthReport.from_metrics(metrics=metrics, findings=findings)
+        report = HealthReport.from_metrics(
+            metrics=metrics,
+            findings=findings,
+            problematic_recalls=top_problematic_recalls(retrievals.traces),
+        )
         self.assertEqual(report.status, "error")
         self.assertTrue(any(item.metric == "duplicate_rate" for item in report.findings))
+        self.assertEqual(len(report.problematic_recalls), 1)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = export_report(Path(tmpdir) / "report.json", report.to_dict())
@@ -38,6 +45,7 @@ class ReportingTests(unittest.TestCase):
             self.assertEqual(payload["session_id"], "session-001")
             self.assertIn("metrics", payload)
             self.assertIn("findings", payload)
+            self.assertIn("problematic_recalls", payload)
 
     def test_compare_reports_flags_regressions(self) -> None:
         baseline = HealthReport(
