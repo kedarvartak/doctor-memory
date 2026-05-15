@@ -23,6 +23,13 @@ def utc_now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def normalize_iso_timestamp(value: str) -> str:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
 @dataclass(slots=True)
 class MemoryEvent:
     event_id: str
@@ -41,6 +48,9 @@ class MemoryEvent:
     latency_ms: float | None = None
     tokens_loaded: int | None = None
     score: float | None = None
+
+    def __post_init__(self) -> None:
+        self.timestamp = normalize_iso_timestamp(self.timestamp)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -80,4 +90,3 @@ class SessionRecord:
     started_at: str | None = None
     ended_at: str | None = None
     event_count: int = 0
-

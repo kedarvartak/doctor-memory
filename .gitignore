@@ -116,3 +116,6 @@ poetry.lock
 
 # pyenv
 .python-version
+
+.letta
+.memfs_doctor

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 from typing import Any
+from uuid import uuid4
 
 from memfs_doctor.adapters.base import AdapterError, BaseAdapter
 from memfs_doctor.core.events import EventKind, MemoryEvent, utc_now_iso
@@ -81,18 +82,82 @@ class LettaTraceAdapter(BaseAdapter):
         repo = self.resolve_memory_dir(memory_dir=memory_dir)
         agent_id = self._agent_id_from_memory_dir(repo)
         session_id = f"letta-git:{agent_id}:{self._git_output(repo, ['rev-parse', '--short', 'HEAD']).strip()}"
+        return self._build_git_events(repo=repo, agent_id=agent_id, session_id=session_id)
 
-        commits_output = self._git_output(
-            repo,
-            ["log", "--reverse", "--format=%H%x1f%aI%x1f%s"],
+    def start_session_capture(self, agent_id: str | None = None, memory_dir: str | Path | None = None) -> "LettaCapture":
+        repo = self.resolve_memory_dir(agent_id=agent_id, memory_dir=memory_dir)
+        resolved_agent_id = self._agent_id_from_memory_dir(repo)
+        head_sha = self._git_output(repo, ["rev-parse", "HEAD"]).strip()
+        session_context = self.state.get_last_session(agent_id=resolved_agent_id)
+        capture_id = f"letta-session:{resolved_agent_id}:{session_context.conversation_id}:{uuid4().hex[:12]}"
+        capture = LettaCapture(
+            capture_id=capture_id,
+            agent_id=resolved_agent_id,
+            memory_dir=repo,
+            base_head=head_sha,
+            started_at=utc_now_iso(),
+            conversation_id=session_context.conversation_id,
         )
+        self.state.save_capture(capture)
+        return capture
+
+    def finish_session_capture(self, capture_id: str, runtime_trace_path: str | Path | None = None) -> list[MemoryEvent]:
+        capture = self.state.load_capture(capture_id)
+        repo = capture.memory_dir
+        if not repo.exists():
+            raise AdapterError(f"Captured memory directory no longer exists: {repo}")
+
+        ended_at = utc_now_iso()
+        events = self._build_git_events(
+            repo=repo,
+            agent_id=capture.agent_id,
+            session_id=capture.capture_id,
+            since_head=capture.base_head,
+            started_at=capture.started_at,
+            ended_at=ended_at,
+            metadata={
+                "capture_id": capture.capture_id,
+                "conversation_id": capture.conversation_id,
+                "capture_mode": "incremental",
+            },
+        )
+        if runtime_trace_path is not None:
+            runtime_events = self._load_runtime_trace_for_capture(
+                path=runtime_trace_path,
+                capture=capture,
+                ended_at=ended_at,
+            )
+            events.extend(runtime_events)
+            events = sorted(events, key=lambda event: (event.timestamp, event.event_id))
+        self.state.delete_capture(capture_id)
+        return events
+
+    def list_captures(self) -> list["LettaCapture"]:
+        return self.state.list_captures()
+
+    def _build_git_events(
+        self,
+        repo: Path,
+        agent_id: str,
+        session_id: str,
+        since_head: str | None = None,
+        started_at: str | None = None,
+        ended_at: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[MemoryEvent]:
+        shared_metadata = dict(metadata or {})
+
+        log_args = ["log", "--reverse", "--format=%H%x1f%aI%x1f%s"]
+        if since_head:
+            log_args.append(f"{since_head}..HEAD")
+        commits_output = self._git_output(repo, log_args)
         commits = [line for line in commits_output.splitlines() if line.strip()]
-        if not commits:
+        if not commits and not since_head:
             raise AdapterError(f"No git history found in memory repository: {repo}")
 
         events: list[MemoryEvent] = []
-        first_timestamp = commits[0].split("\x1f")[1]
-        last_timestamp = commits[-1].split("\x1f")[1]
+        first_timestamp = started_at or (commits[0].split("\x1f")[1] if commits else utc_now_iso())
+        last_timestamp = ended_at or (commits[-1].split("\x1f")[1] if commits else first_timestamp)
         events.append(
             MemoryEvent(
                 event_id=f"{session_id}:start",
@@ -102,7 +167,7 @@ class LettaTraceAdapter(BaseAdapter):
                 session_id=session_id,
                 timestamp=first_timestamp,
                 source="letta-git-import",
-                metadata={"memory_dir": str(repo)},
+                metadata={"memory_dir": str(repo), **shared_metadata},
             )
         )
 
@@ -151,7 +216,7 @@ class LettaTraceAdapter(BaseAdapter):
                         memory_id=memory_id,
                         before=before,
                         after=after,
-                        metadata={"commit": commit_sha, "subject": subject, "path": rel_path},
+                        metadata={"commit": commit_sha, "subject": subject, "path": rel_path, **shared_metadata},
                     )
                 )
 
@@ -164,7 +229,7 @@ class LettaTraceAdapter(BaseAdapter):
                 session_id=session_id,
                 timestamp=last_timestamp,
                 source="letta-git-import",
-                metadata={"memory_dir": str(repo)},
+                metadata={"memory_dir": str(repo), **shared_metadata},
             )
         )
         return events
@@ -199,6 +264,48 @@ class LettaTraceAdapter(BaseAdapter):
             tokens_loaded=payload.get("tokens_loaded"),
             score=payload.get("score"),
         )
+
+    def _load_runtime_trace_for_capture(
+        self,
+        path: str | Path,
+        capture: "LettaCapture",
+        ended_at: str,
+    ) -> list[MemoryEvent]:
+        loaded = self.load_events(path)
+        filtered: list[MemoryEvent] = []
+        for ordinal, event in enumerate(loaded, start=1):
+            if event.kind in {EventKind.SESSION_STARTED, EventKind.SESSION_ENDED}:
+                continue
+            if event.agent_id != capture.agent_id:
+                continue
+            if event.timestamp < capture.started_at or event.timestamp > ended_at:
+                continue
+            filtered.append(
+                MemoryEvent(
+                    event_id=f"{capture.capture_id}:runtime:{ordinal}",
+                    kind=event.kind,
+                    framework=event.framework,
+                    agent_id=capture.agent_id,
+                    session_id=capture.capture_id,
+                    timestamp=event.timestamp,
+                    source=event.source,
+                    memory_id=event.memory_id,
+                    related_memory_ids=list(event.related_memory_ids),
+                    query=event.query,
+                    before=event.before,
+                    after=event.after,
+                    metadata={
+                        **event.metadata,
+                        "capture_id": capture.capture_id,
+                        "conversation_id": capture.conversation_id,
+                        "capture_mode": "runtime-trace",
+                    },
+                    latency_ms=event.latency_ms,
+                    tokens_loaded=event.tokens_loaded,
+                    score=event.score,
+                )
+            )
+        return filtered
 
     def _git_output(self, repo: Path, args: list[str]) -> str:
         completed = subprocess.run(
@@ -271,6 +378,7 @@ class LettaTraceAdapter(BaseAdapter):
 @dataclass(slots=True)
 class LettaLocalState:
     home: Path = Path.home()
+    workspace_root: Path = Path.cwd()
 
     @property
     def root_dir(self) -> Path:
@@ -280,8 +388,95 @@ class LettaLocalState:
     def agents_dir(self) -> Path:
         return self.root_dir / "agents"
 
+    @property
+    def captures_dir(self) -> Path:
+        return self.workspace_root / ".memfs_doctor" / "captures"
+
+    @property
+    def settings_path(self) -> Path:
+        return self.root_dir / "settings.json"
+
+    def get_last_session(self, agent_id: str) -> "LettaSessionContext":
+        conversation_id = "unknown"
+        if self.settings_path.exists():
+            try:
+                payload = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                payload = {}
+            last_session = payload.get("lastSession", {})
+            if last_session.get("agentId") == agent_id:
+                conversation_id = str(last_session.get("conversationId", "default"))
+            else:
+                sessions_by_server = payload.get("sessionsByServer", {})
+                for server_payload in sessions_by_server.values():
+                    if server_payload.get("agentId") == agent_id:
+                        conversation_id = str(server_payload.get("conversationId", "default"))
+                        break
+        return LettaSessionContext(agent_id=agent_id, conversation_id=conversation_id)
+
+    def save_capture(self, capture: "LettaCapture") -> None:
+        self.captures_dir.mkdir(parents=True, exist_ok=True)
+        path = self.captures_dir / f"{capture.capture_id}.json"
+        path.write_text(json.dumps(capture.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+
+    def load_capture(self, capture_id: str) -> "LettaCapture":
+        path = self.captures_dir / f"{capture_id}.json"
+        if not path.exists():
+            raise AdapterError(f"Unknown Letta capture id: {capture_id}")
+        return LettaCapture.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+    def delete_capture(self, capture_id: str) -> None:
+        path = self.captures_dir / f"{capture_id}.json"
+        if path.exists():
+            path.unlink()
+
+    def list_captures(self) -> list["LettaCapture"]:
+        if not self.captures_dir.exists():
+            return []
+        captures: list[LettaCapture] = []
+        for path in sorted(self.captures_dir.glob("*.json")):
+            captures.append(LettaCapture.from_dict(json.loads(path.read_text(encoding="utf-8"))))
+        return captures
+
 
 @dataclass(slots=True)
 class LettaAgent:
     agent_id: str
     memory_dir: Path
+
+
+@dataclass(slots=True)
+class LettaSessionContext:
+    agent_id: str
+    conversation_id: str
+
+
+@dataclass(slots=True)
+class LettaCapture:
+    capture_id: str
+    agent_id: str
+    memory_dir: Path
+    base_head: str
+    started_at: str
+    conversation_id: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "capture_id": self.capture_id,
+            "agent_id": self.agent_id,
+            "memory_dir": str(self.memory_dir),
+            "base_head": self.base_head,
+            "started_at": self.started_at,
+            "conversation_id": self.conversation_id,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "LettaCapture":
+        return cls(
+            capture_id=payload["capture_id"],
+            agent_id=payload["agent_id"],
+            memory_dir=Path(payload["memory_dir"]),
+            base_head=payload["base_head"],
+            started_at=payload["started_at"],
+            conversation_id=payload.get("conversation_id", "unknown"),
+        )

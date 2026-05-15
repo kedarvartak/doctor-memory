@@ -27,6 +27,7 @@ Run these after every meaningful implementation change unless a narrower command
 PYTHONPATH=src python3 -m unittest discover -s tests
 PYTHONPATH=src python3 -m memfs_doctor.cli.main --help
 PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
 ```
 
 ### Current End-To-End CLI Check
@@ -58,6 +59,28 @@ For the local Letta git-import path:
 - `ingest-letta-agent` creates a synthetic session from MemFS git history
 - the imported session appears in `sessions`
 - imported metrics do not report false contradiction scores from markdown frontmatter alone
+
+For the bounded Letta session capture path:
+
+- `start-letta-capture` creates a pending capture marker in the local project workspace
+- `letta-captures` lists the pending capture id
+- `finish-letta-capture` ingests a bounded session into the local store
+- the resulting session id uses the `letta-session:<agent>:<conversation>:...` form
+- the pending capture disappears after successful finish
+
+For the runtime-trace augmentation path:
+
+- `finish-letta-capture --runtime-trace <jsonl>` merges retrieval and miss events into the bounded session
+- retrieval events preserve `latency_ms`, `tokens_loaded`, and `score` when present
+- retrieval miss events contribute to `empty_retrieval_rate`
+- resulting metrics reflect retrieval timing and token pressure from the runtime trace
+
+For the wrapped terminal runtime recorder:
+
+- `record-letta-runtime` generates the runtime JSONL trace automatically
+- `record-letta-runtime --auto-finish` also finishes the bounded session capture into SQLite
+- transcript-derived retrieval events are marked as inferred in metadata
+- miss detection comes from response-content heuristics and should be validated manually against the visible Letta exchange
 
 ## Manual Test Policy
 
@@ -269,6 +292,116 @@ Expected result:
 
 Pass condition:
 - a real local MemFS repo can be discovered and imported end to end
+
+### Manual Test 8: Bounded Real Letta Session Capture
+
+Goal:
+- confirm that MemFS Doctor captures one real Letta session as its own bounded session trace instead of importing all historical MemFS state
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
+PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+# run a real Letta session here that changes memory
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture --capture-id <capture-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db sessions
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db replay --session <session-id>
+```
+
+Suggested Letta session flow:
+1. start a capture for the target agent
+2. open or continue one conversation in Letta
+3. make one memory-affecting interaction such as teaching a durable fact
+4. optionally make one follow-up interaction that updates the same fact
+5. finish the capture
+
+Expected result:
+- the resulting session is separate from full-history imports
+- only commits created during the capture window are included
+- `sessions` shows a `letta-session:...` session id
+- `inspect` and `replay` show only the mutations that happened after capture start
+- if no memory commits occurred during the window, the session still exists with just start/end events
+
+Pass condition:
+- a real Letta conversation window can be bracketed and stored as one bounded session trace in the local event store
+
+### Manual Test 9: Runtime Trace Augmented Session
+
+Goal:
+- confirm that a bounded Letta session can include retrievals, misses, and timing metadata when a runtime trace is available
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+# run a real Letta session here that causes at least one recall and one miss
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture \
+  --capture-id <capture-id> \
+  --runtime-trace <path-to-runtime-trace.jsonl>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db replay --session <session-id>
+```
+
+Suggested runtime trace contents:
+- one `memory_retrieved` event
+- one `memory_retrieval_miss` event
+- `latency_ms` on both when available
+- `tokens_loaded` on retrieval when available
+- the real Letta `agent_id`
+- timestamps inside the capture window
+
+Expected result:
+- `inspect` shows retrieval and miss event kinds in the session
+- `metrics` shows non-zero `retrieval_count`
+- `metrics` shows non-zero `retrieval_latency_ms_avg`
+- `metrics` shows non-zero `empty_retrieval_rate`
+- `metrics` reflects `memory_tokens_loaded_total` when provided
+- `replay` includes retrieval and miss entries in the session timeline
+
+Pass condition:
+- bounded session capture plus runtime trace produces a single stored session containing both mutation and retrieval-side events
+
+### Manual Test 10: Wrapped Letta Runtime Recorder
+
+Goal:
+- confirm that MemFS Doctor can generate the runtime trace itself while you use terminal Letta normally
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db record-letta-runtime \
+  --capture-id <capture-id> \
+  --auto-finish \
+  -- letta
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db replay --session <session-id>
+```
+
+Suggested Letta interaction:
+1. ask one recall-style question for a fact the agent should know
+2. ask one question for a fact the agent does not know
+3. optionally issue one remember/update command in the same session
+4. exit Letta cleanly
+
+Expected result:
+- a runtime trace file is written under `.memfs_doctor/runtime/`
+- the stored session includes `memory_retrieved` and `memory_retrieval_miss`
+- `metrics` shows non-zero `retrieval_count`
+- `metrics` shows non-zero `empty_retrieval_rate`
+- `replay` includes the inferred retrieval-side events in session order
+
+Pass condition:
+- you can test Criterion 2 without manually authoring a runtime JSONL file
+
+Important note:
+- retrieval and miss events produced by the wrapper are inferred from the visible terminal transcript
+- treat them as workflow-grounded instrumentation, not native Letta internal event exports
 
 ## Manual Test Notes Template
 

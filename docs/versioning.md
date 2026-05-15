@@ -116,3 +116,63 @@ Reason:
 Next:
 - Add retrieval-aware capture beyond git history so reads, misses, and usefulness signals can be imported from real Letta activity.
 - Improve session modeling so repeated live imports can be compared over time rather than only by current git head state.
+
+## 2026-05-15 | v0.1.4-letta-session-capture
+
+Type: feature
+Summary: Added bounded start/finish session capture so real Letta activity can be ingested as a true session window instead of only full-history imports.
+
+Changes:
+- Added capture state storage in the project-local `.memfs_doctor/captures` directory.
+- Added `start-letta-capture`, `finish-letta-capture`, and `letta-captures` CLI commands.
+- Implemented incremental MemFS import bounded by the git head present at capture start.
+- Added automated coverage proving that only commits created after capture start are included in the resulting session.
+- Verified live start/list/finish capture behavior against the real local Letta agent on this machine without mutating the user's memory repo.
+
+Reason:
+- Criterion 1 required capturing a real Letta session into the local event store, not only reconstructing synthetic sessions from the full MemFS history.
+- A bounded capture window is the safest practical bridge to true session traces with the local artifacts currently available.
+
+Next:
+- Capture retrievals, misses, and timing metadata from real Letta runtime artifacts so Phase 2 can satisfy the remaining trace-detail exit criteria.
+- Improve automatic session naming and correlation once richer Letta session metadata becomes available.
+
+## 2026-05-15 | v0.1.5-runtime-trace-merge
+
+Type: feature
+Summary: Added runtime-trace augmentation so bounded Letta session captures can include retrievals, misses, and timing metadata when available.
+
+Changes:
+- Added `--runtime-trace <jsonl>` support to `finish-letta-capture`.
+- Implemented runtime trace filtering and merge into the bounded capture session id.
+- Preserved retrieval metadata such as `latency_ms`, `tokens_loaded`, and `score` in merged events.
+- Added automated coverage for merging retrieval and retrieval-miss events into a captured session.
+- Verified a CLI-level synthetic workflow where a bounded capture stored retrieval and miss events and produced non-zero retrieval metrics.
+
+Reason:
+- Git-backed MemFS history alone cannot satisfy the Phase 2 trace-detail requirement around recalls, misses, and timing metadata.
+- A merge path lets MemFS Doctor consume richer Letta runtime traces when those artifacts are available without changing the existing session-capture model.
+
+Next:
+- Identify or enable a real Letta runtime export path so retrieval and miss events come from actual Letta runs rather than synthetic JSONL fixtures.
+- Add tighter correlation between runtime events and mutation events once conversation-level identifiers are exposed consistently.
+
+## 2026-05-15 | v0.1.6-wrapped-runtime-recorder
+
+Type: feature
+Summary: Added a wrapped Letta terminal recorder that generates runtime JSONL traces automatically and can auto-finish bounded captures.
+
+Changes:
+- Added `memfs_doctor.runtime.letta_runtime` for transcript capture, turn parsing, retrieval/miss inference, and JSONL trace writing.
+- Added the `record-letta-runtime` CLI command with optional `--auto-finish`.
+- Implemented a default runtime trace output path under `.memfs_doctor/runtime/`.
+- Added tests for transcript parsing and runtime trace writing.
+- Verified an end-to-end wrapped fake Letta session where inferred retrieval and miss events were written and ingested into SQLite automatically.
+
+Reason:
+- The user needed a practical way to test Criterion 2 without hunting for a non-existent built-in Letta runtime trace export in the current local install.
+- A wrapped terminal recorder is the fastest path to workflow-integrated runtime traces while staying compatible with the existing bounded session-capture model.
+
+Next:
+- Validate the wrapper against a real interactive Letta session in the user's environment.
+- Improve inference quality and event correlation once more native Letta runtime signals are available.

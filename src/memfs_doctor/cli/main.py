@@ -9,6 +9,7 @@ from memfs_doctor.adapters.letta import LettaTraceAdapter
 from memfs_doctor.core.metrics import compute_metrics
 from memfs_doctor.core.replay import diff_steps, replay_session
 from memfs_doctor.reports.render import render_metrics, render_replay, render_sessions
+from memfs_doctor.runtime.letta_runtime import default_runtime_trace_path, default_transcript_path, record_runtime_trace
 from memfs_doctor.storage.sqlite import SQLiteEventStore
 
 
@@ -26,6 +27,45 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("sessions", help="List captured sessions.")
 
     subparsers.add_parser("letta-agents", help="List local Letta agents discovered under ~/.letta/agents.")
+
+    subparsers.add_parser("letta-captures", help="List pending Letta session captures.")
+
+    start_letta_capture = subparsers.add_parser(
+        "start-letta-capture",
+        help="Start a bounded capture window for a real Letta session.",
+    )
+    start_letta_capture.add_argument("--agent", help="Letta agent identifier under ~/.letta/agents.")
+    start_letta_capture.add_argument("--memory-dir", help="Explicit path to a Letta memory directory.")
+
+    record_letta_runtime = subparsers.add_parser(
+        "record-letta-runtime",
+        help="Run Letta through a terminal recorder and emit a runtime JSONL trace for the active capture.",
+    )
+    record_letta_runtime.add_argument("--capture-id", required=True, help="Active capture id returned by start-letta-capture.")
+    record_letta_runtime.add_argument(
+        "--trace-path",
+        help="Optional output path for the runtime JSONL trace. Defaults to .memfs_doctor/runtime/<capture-id>.jsonl",
+    )
+    record_letta_runtime.add_argument(
+        "--auto-finish",
+        action="store_true",
+        help="Finish the capture and ingest the merged session automatically after the wrapped command exits.",
+    )
+    record_letta_runtime.add_argument(
+        "runtime_command",
+        nargs=argparse.REMAINDER,
+        help="Command to run after --, for example: -- letta",
+    )
+
+    finish_letta_capture = subparsers.add_parser(
+        "finish-letta-capture",
+        help="Finish a bounded Letta session capture and ingest events into the local store.",
+    )
+    finish_letta_capture.add_argument("--capture-id", required=True, help="Capture id returned by start-letta-capture.")
+    finish_letta_capture.add_argument(
+        "--runtime-trace",
+        help="Optional Letta runtime JSONL trace to merge retrievals, misses, and timing metadata into the captured session.",
+    )
 
     ingest_letta_agent = subparsers.add_parser(
         "ingest-letta-agent",
@@ -94,6 +134,77 @@ def cmd_letta_agents(args: argparse.Namespace) -> int:
         return 0
     for agent in agents:
         print(f"{agent.agent_id} memory_dir={agent.memory_dir}")
+    return 0
+
+
+def cmd_letta_captures(args: argparse.Namespace) -> int:
+    del args
+    adapter = LettaTraceAdapter()
+    captures = adapter.list_captures()
+    if not captures:
+        print("No pending Letta captures.")
+        return 0
+    for capture in captures:
+        print(
+            f"{capture.capture_id} agent={capture.agent_id} conversation={capture.conversation_id} "
+            f"started={capture.started_at} base_head={capture.base_head[:12]}"
+        )
+    return 0
+
+
+def cmd_start_letta_capture(args: argparse.Namespace) -> int:
+    if not args.agent and not args.memory_dir:
+        raise SystemExit("Provide --agent <id> or --memory-dir <path>.")
+    adapter = LettaTraceAdapter()
+    capture = adapter.start_session_capture(agent_id=args.agent, memory_dir=args.memory_dir)
+    print(
+        f"Started Letta capture {capture.capture_id} agent={capture.agent_id} "
+        f"conversation={capture.conversation_id} base_head={capture.base_head[:12]}"
+    )
+    return 0
+
+
+def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
+    adapter = LettaTraceAdapter()
+    capture = next((item for item in adapter.list_captures() if item.capture_id == args.capture_id), None)
+    if capture is None:
+        raise SystemExit(f"Unknown capture id: {args.capture_id}")
+
+    command = list(args.runtime_command)
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        command = ["letta"]
+
+    output_path = Path(args.trace_path) if args.trace_path else default_runtime_trace_path(Path.cwd(), capture.capture_id)
+    transcript_path = default_transcript_path(Path.cwd(), capture.capture_id)
+    exit_code, trace_path, raw_transcript_path, events = record_runtime_trace(
+        agent_id=capture.agent_id,
+        session_id=capture.capture_id,
+        command=command,
+        output_path=output_path,
+        transcript_path=transcript_path,
+    )
+    print(f"\nWrote raw transcript to {raw_transcript_path}")
+    print(f"Wrote runtime trace to {trace_path} with {len(events)} inferred events.")
+
+    if args.auto_finish:
+        store = _store_from_args(args)
+        store.init_db()
+        merged_events = adapter.finish_session_capture(capture.capture_id, runtime_trace_path=trace_path)
+        ingested = store.ingest_events(merged_events)
+        print(f"Ingested {ingested} events from Letta session capture {capture.capture_id}")
+
+    return exit_code
+
+
+def cmd_finish_letta_capture(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    store.init_db()
+    adapter = LettaTraceAdapter()
+    events = adapter.finish_session_capture(args.capture_id, runtime_trace_path=args.runtime_trace)
+    count = store.ingest_events(events)
+    print(f"Ingested {count} events from Letta session capture {args.capture_id}")
     return 0
 
 
@@ -171,6 +282,10 @@ def main(argv: list[str] | None = None) -> int:
         "ingest": cmd_ingest,
         "sessions": cmd_sessions,
         "letta-agents": cmd_letta_agents,
+        "letta-captures": cmd_letta_captures,
+        "start-letta-capture": cmd_start_letta_capture,
+        "record-letta-runtime": cmd_record_letta_runtime,
+        "finish-letta-capture": cmd_finish_letta_capture,
         "ingest-letta-agent": cmd_ingest_letta_agent,
         "inspect": cmd_inspect,
         "metrics": cmd_metrics,

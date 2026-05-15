@@ -11,6 +11,8 @@ Current implementation focus:
 - Letta-first adapter scaffolding
 - local Letta agent discovery
 - git-history import from real Letta MemFS repos
+- bounded start/finish capture for real Letta sessions
+- interactive runtime trace recording for Letta terminal sessions
 
 ## Testing
 
@@ -44,6 +46,46 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-letta.db 
 PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-letta.db ingest-letta-agent --agent <agent-id>
 PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-letta.db sessions
 ```
+
+## Real Letta Session Capture
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+# run a real Letta conversation here
+PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture --capture-id <capture-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db sessions
+```
+
+## Runtime Trace Augmentation
+
+If you have a Letta runtime JSONL trace with retrieval and miss events, merge it into the bounded session:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture \
+  --capture-id <capture-id> \
+  --runtime-trace <path-to-runtime-trace.jsonl>
+```
+
+## Wrapped Letta Runtime Recording
+
+You can also have MemFS Doctor generate the runtime trace for a terminal Letta session automatically:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db record-letta-runtime \
+  --capture-id <capture-id> \
+  --auto-finish \
+  -- letta
+```
+
+This wrapper:
+
+- runs the terminal Letta command
+- records transcript lines
+- infers retrieval and retrieval-miss events from the conversation flow
+- writes a runtime JSONL trace under `.memfs_doctor/runtime/`
+- optionally auto-finishes the bounded session capture into SQLite
 
 ## Current State
 
