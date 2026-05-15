@@ -79,6 +79,7 @@ def analyze_retrievals(events: list[MemoryEvent]) -> RetrievalInspectionReport:
 
         used = event.metadata.get("used")
         stale = bool(event.metadata.get("stale"))
+        inferred = bool(event.metadata.get("inferred"))
         cause_step = None
         cause_event_id = None
         cause_kind = None
@@ -90,9 +91,19 @@ def analyze_retrievals(events: list[MemoryEvent]) -> RetrievalInspectionReport:
             cause_kind = linked_event.kind.value
             cause_summary = summarize_memory_event(linked_event)
 
-        likely_useful = event.kind == EventKind.MEMORY_RETRIEVED and not stale and used is not False
+        likely_useful = (
+            event.kind == EventKind.MEMORY_RETRIEVED
+            and not stale
+            and (
+                used is True
+                or (not inferred and event.memory_id is not None)
+            )
+        )
         likely_noisy = event.kind == EventKind.MEMORY_RETRIEVED and (
-            stale or used is False or (event.score is not None and event.score < LOW_SCORE_THRESHOLD)
+            stale
+            or used is False
+            or (event.score is not None and event.score < LOW_SCORE_THRESHOLD)
+            or (inferred and inferred_recall_looks_noisy(event))
         )
 
         traces.append(
@@ -173,3 +184,21 @@ def _problematic_sort_key(trace: RetrievalTrace) -> tuple[int, int, float, float
         trace.latency_ms or 0.0,
         trace.step,
     )
+
+
+def inferred_recall_looks_noisy(event: MemoryEvent) -> bool:
+    response_text = str(event.metadata.get("response_text", "")).strip().lower()
+    if not response_text:
+        return True
+    if event.memory_id is None and len(response_text) > 240:
+        return True
+    noisy_markers = (
+        "session usage:",
+        "resume this agent with:",
+        "/agents",
+        "/resume",
+        "total duration (api):",
+        "total duration (wall):",
+        "letta code is ",
+    )
+    return any(marker in response_text for marker in noisy_markers)

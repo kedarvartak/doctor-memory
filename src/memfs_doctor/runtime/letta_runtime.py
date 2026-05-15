@@ -23,6 +23,9 @@ from memfs_doctor.core.events import EventKind, MemoryEvent, utc_now_iso
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 PROMPT_RE = re.compile(r"[›>]\s+(.*\S)\s*$")
+CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+SEPARATOR_RE = re.compile(r"^[\s\-_=~─━│┄┅┈┉┊┋•·≡�]{8,}$")
+PROMPT_ONLY_RE = re.compile(r"^[›>]\s*$")
 QUESTION_PREFIXES = (
     "what ",
     "where ",
@@ -51,12 +54,25 @@ MISS_PATTERNS = (
 STATUS_ONLY_PREFIXES = (
     "letta code is remembering",
     "resuming conversation with letta code",
+    "letta code is formulating",
+    "letta code is reasoning",
+    "letta code is pondering",
+    "letta code is deliberating",
+    "letta code is indexing",
 )
 STATUS_LINE_PREFIXES = STATUS_ONLY_PREFIXES + (
     "└  tip:",
     "tip:",
     "press / for commands",
     "press ctrl-c again to exit",
+    "session usage:",
+    "resume this agent with:",
+    "total duration (api):",
+    "total duration (wall):",
+    "→ /",
+    "resume this conversation with:",
+    "letta --conv ",
+    "letta -n ",
 )
 
 
@@ -84,7 +100,8 @@ def default_transcript_path(workspace_root: Path, capture_id: str) -> Path:
 
 
 def sanitize_terminal_line(text: str) -> str:
-    return ANSI_RE.sub("", text).replace("\r", "").strip("\n")
+    cleaned = ANSI_RE.sub("", text).replace("\r", "").strip("\n")
+    return CONTROL_RE.sub("", cleaned)
 
 
 def is_question(text: str) -> bool:
@@ -93,6 +110,7 @@ def is_question(text: str) -> bool:
 
 
 def parse_transcript_turns(lines: list[RecordedLine]) -> list[TranscriptTurn]:
+    lines = drop_pre_resume_output(lines)
     turns: list[TranscriptTurn] = []
     current: TranscriptTurn | None = None
     pending_query: tuple[str, str] | None = None
@@ -147,6 +165,18 @@ def parse_transcript_turns(lines: list[RecordedLine]) -> list[TranscriptTurn]:
     return turns
 
 
+def drop_pre_resume_output(lines: list[RecordedLine]) -> list[RecordedLine]:
+    resume_index: int | None = None
+    for index, recorded in enumerate(lines):
+        normalized = sanitize_terminal_line(recorded.text).strip().lower()
+        if "resuming conversation with letta code" in normalized:
+            resume_index = index
+            break
+    if resume_index is None:
+        return lines
+    return lines[resume_index + 1 :]
+
+
 def infer_runtime_events_from_turns(
     turns: list[TranscriptTurn],
     *,
@@ -159,7 +189,8 @@ def infer_runtime_events_from_turns(
     for turn in turns:
         if not is_question(turn.query):
             continue
-        filtered_response_lines = [line for line in turn.response_lines if not is_status_response_line(line)]
+        filtered_response_lines = normalize_response_lines(turn.response_lines)
+        filtered_memory_lines = normalize_memory_lines(turn.memory_lines)
         response_text = "\n".join(filtered_response_lines).strip()
         if not response_text or is_status_only_response(response_text):
             continue
@@ -184,7 +215,7 @@ def infer_runtime_events_from_turns(
                 metadata={
                     "inferred": True,
                     "response_text": response_text,
-                    "memory_lines": list(turn.memory_lines),
+                    "memory_lines": filtered_memory_lines,
                 },
                 latency_ms=latency_ms,
             )
@@ -198,8 +229,50 @@ def is_status_only_response(text: str) -> bool:
 
 
 def is_status_response_line(text: str) -> bool:
-    normalized = text.strip().lower()
+    normalized = text.strip().lower().lstrip("•·-=≡ ")
     return any(normalized.startswith(prefix) for prefix in STATUS_LINE_PREFIXES)
+
+
+def is_terminal_noise_line(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    normalized = stripped.lower()
+    if PROMPT_ONLY_RE.match(stripped):
+        return True
+    if SEPARATOR_RE.match(stripped):
+        return True
+    if is_status_response_line(stripped):
+        return True
+    if normalized in {"[<u"}:
+        return True
+    if normalized.startswith("/agents") or normalized.startswith("/resume") or normalized.startswith("/new"):
+        return True
+    if normalized.startswith("/init") or normalized.startswith("/remember"):
+        return True
+    return False
+
+
+def normalize_response_lines(lines: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for line in lines:
+        normalized = " ".join(sanitize_terminal_line(line).split())
+        if is_terminal_noise_line(normalized):
+            if cleaned:
+                break
+            continue
+        cleaned.append(normalized)
+    return cleaned
+
+
+def normalize_memory_lines(lines: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for line in lines:
+        normalized = " ".join(sanitize_terminal_line(line).split())
+        if is_terminal_noise_line(normalized):
+            continue
+        cleaned.append(normalized)
+    return cleaned
 
 
 def write_runtime_trace(path: str | Path, events: list[MemoryEvent]) -> Path:

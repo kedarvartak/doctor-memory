@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from memfs_doctor.adapters.letta import LettaTraceAdapter
+from memfs_doctor.core.events import EventKind, MemoryEvent
 from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
 
 
@@ -43,6 +44,70 @@ class RetrievalTraceTests(unittest.TestCase):
         self.assertEqual(len(problematic), 1)
         self.assertEqual(problematic[0].step, 8)
         self.assertIn("Priya", problematic[0].cause_summary or "")
+
+    def test_inferred_runtime_recall_is_not_marked_useful_without_evidence(self) -> None:
+        events = [
+            MemoryEvent(
+                event_id="s:start",
+                kind=EventKind.SESSION_STARTED,
+                framework="letta",
+                agent_id="agent-001",
+                session_id="session-001",
+                timestamp="2026-05-15T10:00:00+00:00",
+                source="runtime",
+            ),
+            MemoryEvent(
+                event_id="s:1",
+                kind=EventKind.MEMORY_RETRIEVED,
+                framework="letta",
+                agent_id="agent-001",
+                session_id="session-001",
+                timestamp="2026-05-15T10:00:01+00:00",
+                source="runtime",
+                query="what bike do i have",
+                metadata={"inferred": True, "response_text": "Pulsar N150."},
+                latency_ms=2000.0,
+            ),
+        ]
+
+        report = analyze_retrievals(events)
+        trace = report.traces[0]
+
+        self.assertFalse(trace.likely_useful)
+        self.assertFalse(trace.likely_noisy)
+
+    def test_inferred_runtime_recall_with_noisy_response_is_problematic(self) -> None:
+        events = [
+            MemoryEvent(
+                event_id="s:start",
+                kind=EventKind.SESSION_STARTED,
+                framework="letta",
+                agent_id="agent-001",
+                session_id="session-001",
+                timestamp="2026-05-15T10:00:00+00:00",
+                source="runtime",
+            ),
+            MemoryEvent(
+                event_id="s:1",
+                kind=EventKind.MEMORY_RETRIEVED,
+                framework="letta",
+                agent_id="agent-001",
+                session_id="session-001",
+                timestamp="2026-05-15T10:00:01+00:00",
+                source="runtime",
+                query="what car do i have",
+                metadata={
+                    "inferred": True,
+                    "response_text": "Honda. Session usage: 13 steps Resume this agent with: letta -n",
+                },
+                latency_ms=5000.0,
+            ),
+        ]
+
+        report = analyze_retrievals(events)
+        trace = report.traces[0]
+
+        self.assertTrue(trace.likely_noisy)
 
 
 if __name__ == "__main__":

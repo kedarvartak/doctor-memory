@@ -9,8 +9,10 @@ from memfs_doctor.runtime.letta_runtime import (
     RecordedLine,
     default_runtime_trace_path,
     default_transcript_path,
+    drop_pre_resume_output,
     infer_runtime_events_from_turns,
     InteractiveRuntimeRecorder,
+    normalize_response_lines,
     parse_transcript_turns,
     write_raw_transcript,
     write_runtime_trace,
@@ -139,6 +141,85 @@ class RuntimeTraceTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].kind.value, "memory_retrieved")
         self.assertEqual(events[0].query, "what is my surname")
+
+    def test_normalizes_terminal_noise_from_response_lines(self) -> None:
+        cleaned = normalize_response_lines(
+            [
+                "Honda.",
+                "≡ Letta Code is formulating… (esc to interrupt)",
+                "────────────────────────────────────────────",
+                "›",
+                "→ /agents    list all agents",
+                "Session usage: 13 steps",
+                "Resume this agent with:",
+            ]
+        )
+
+        self.assertEqual(cleaned, ["Honda."])
+
+    def test_inferred_runtime_recall_keeps_clean_response_text_only(self) -> None:
+        lines = [
+            RecordedLine("2026-05-15T10:00:00+00:00", "> what car do i have"),
+            RecordedLine("2026-05-15T10:00:00.100000+00:00", "• Honda."),
+            RecordedLine("2026-05-15T10:00:00.110000+00:00", "• Letta Code is formulating… (esc to interrupt)"),
+            RecordedLine("2026-05-15T10:00:00.120000+00:00", "────────────────────────────────────────────"),
+            RecordedLine("2026-05-15T10:00:00.130000+00:00", "›"),
+            RecordedLine("2026-05-15T10:00:00.140000+00:00", "Resume this agent with:"),
+        ]
+
+        turns = parse_transcript_turns(lines)
+        events = infer_runtime_events_from_turns(
+            turns,
+            agent_id="agent-001",
+            session_id="session-001",
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].metadata["response_text"], "Honda.")
+
+    def test_truncates_response_after_first_real_answer_before_footer_noise(self) -> None:
+        lines = [
+            RecordedLine("2026-05-15T10:00:00+00:00", "> do u remember im an alias"),
+            RecordedLine("2026-05-15T10:00:16+00:00", "• Yeah — Tomato. It's in my memory."),
+            RecordedLine("2026-05-15T10:00:16.100000+00:00", "• Letta Code is indexing… (esc to interrupt)"),
+            RecordedLine("2026-05-15T10:00:16.200000+00:00", "└ Tip: Use /remember [instructions] to remember something from the conversation."),
+            RecordedLine("2026-05-15T10:00:16.300000+00:00", "────────────────────────────────────────────────────────"),
+            RecordedLine("2026-05-15T10:00:16.400000+00:00", "Resume this conversation with:"),
+            RecordedLine("2026-05-15T10:00:16.500000+00:00", "letta --conv conv-123"),
+        ]
+
+        turns = parse_transcript_turns(lines)
+        events = infer_runtime_events_from_turns(
+            turns,
+            agent_id="agent-001",
+            session_id="session-001",
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].metadata["response_text"], "Yeah — Tomato. It's in my memory.")
+
+    def test_drops_pre_resume_output_before_parsing_turns(self) -> None:
+        lines = [
+            RecordedLine("2026-05-15T10:00:00+00:00", "• Honda."),
+            RecordedLine("2026-05-15T10:00:00.050000+00:00", "• Resuming conversation with Letta Code"),
+            RecordedLine("2026-05-15T10:00:01+00:00", "> my height is ?"),
+            RecordedLine("2026-05-15T10:00:01.020000+00:00", "• Still don't know that one."),
+        ]
+
+        filtered = drop_pre_resume_output(lines)
+        self.assertEqual(len(filtered), 2)
+        self.assertEqual(filtered[0].text, "> my height is ?")
+
+        turns = parse_transcript_turns(lines)
+        events = infer_runtime_events_from_turns(
+            turns,
+            agent_id="agent-001",
+            session_id="session-001",
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind.value, "memory_retrieval_miss")
+        self.assertEqual(events[0].query, "my height is ?")
 
 
 if __name__ == "__main__":
