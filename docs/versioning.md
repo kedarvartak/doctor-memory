@@ -176,3 +176,23 @@ Reason:
 Next:
 - Validate the wrapper against a real interactive Letta session in the user's environment.
 - Improve inference quality and event correlation once more native Letta runtime signals are available.
+
+## 2026-05-15 | v0.2.0-phase3-reporting
+
+Type: feature
+Summary: Implemented the Phase 3 reporting layer with health reports, threshold findings, and session-to-session regression comparison.
+
+Changes:
+- Added `memfs_doctor.core.reporting` with threshold rules, health reports, comparison reports, and JSON export helpers.
+- Added `report` and `compare-sessions` CLI commands.
+- Added rendered outputs for health reports and comparison reports.
+- Added automated tests for threshold evaluation, report export, and regression comparison.
+- Documented the manual Letta validation path for baseline health reports and session comparison.
+
+Reason:
+- Phase 3 requires turning raw metrics into durable observability outputs that can be compared across sessions.
+- The project needed a first-class reporting layer before adding CI hooks or alert-style workflows.
+
+Next:
+- Add configurable threshold files rather than only built-in defaults.
+- Add non-zero exit behavior for failing report thresholds and regression checks in the next workflow-oriented phase.

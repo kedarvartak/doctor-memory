@@ -82,6 +82,13 @@ For the wrapped terminal runtime recorder:
 - transcript-derived retrieval events are marked as inferred in metadata
 - miss detection comes from response-content heuristics and should be validated manually against the visible Letta exchange
 
+For the Phase 3 reporting path:
+
+- `report --session <id>` returns a health report with thresholds and findings
+- `compare-sessions --baseline <id> --candidate <id>` returns deltas and regression counts
+- report output can be exported as JSON artifacts
+- comparison output should flag worsened metrics such as higher duplicate rate or higher empty retrieval rate
+
 ## Manual Test Policy
 
 Automated tests are necessary but not sufficient. For memory systems, manual tests should confirm that the metrics and replay outputs feel directionally correct against real agent behavior.
@@ -402,6 +409,61 @@ Pass condition:
 Important note:
 - retrieval and miss events produced by the wrapper are inferred from the visible terminal transcript
 - treat them as workflow-grounded instrumentation, not native Letta internal event exports
+
+### Manual Test 11: Phase 3 Healthy Baseline Report
+
+Goal:
+- generate a health report from a relatively clean Letta session and verify the report/finding structure
+
+Suggested Letta flow:
+1. start a fresh bounded capture
+2. ask one known fact question
+3. avoid contradictory or duplicate memory writes
+4. finish the session through `record-letta-runtime --auto-finish`
+5. run `report --session <session-id> --json`
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db report \
+  --session <session-id> \
+  --json
+```
+
+Expected result:
+- report JSON contains `status`, `metrics`, and `findings`
+- `retrieval_count` is non-zero if you asked a known fact question
+- findings are fewer and less severe than in intentionally messy sessions
+
+Pass condition:
+- a health report is generated successfully from a real Letta session
+
+### Manual Test 12: Phase 3 Regression Comparison
+
+Goal:
+- compare two real Letta sessions and verify the regression output flags worse memory behavior
+
+Suggested setup:
+1. create a baseline session with one clean recall and no duplicate updates
+2. create a candidate session with at least one miss and one noisy or repeated memory update
+3. finish both sessions through the runtime wrapper
+4. compare them
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db compare-sessions \
+  --baseline <baseline-session-id> \
+  --candidate <candidate-session-id> \
+  --json
+```
+
+Expected result:
+- output contains `deltas`, `regressions`, and `regression_count`
+- worsened metrics such as `empty_retrieval_rate`, `duplicate_rate`, or `memory_churn_rate` appear in regressions
+
+Pass condition:
+- the comparison surfaces directionally correct regressions between two real Letta sessions
 
 ## Manual Test Notes Template
 

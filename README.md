@@ -13,6 +13,7 @@ Current implementation focus:
 - git-history import from real Letta MemFS repos
 - bounded start/finish capture for real Letta sessions
 - interactive runtime trace recording for Letta terminal sessions
+- health report generation and session comparison
 
 ## Testing
 
@@ -86,6 +87,25 @@ This wrapper:
 - infers retrieval and retrieval-miss events from the conversation flow
 - writes a runtime JSONL trace under `.memfs_doctor/runtime/`
 - optionally auto-finishes the bounded session capture into SQLite
+
+## Health Reports And Regression Comparison
+
+Generate a health report for a stored session:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db report \
+  --session <session-id> \
+  --json
+```
+
+Compare two sessions:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db compare-sessions \
+  --baseline <baseline-session-id> \
+  --candidate <candidate-session-id> \
+  --json
+```
 
 ## Current State
 

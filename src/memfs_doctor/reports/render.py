@@ -5,6 +5,7 @@ import json
 from memfs_doctor.core.events import SessionRecord
 from memfs_doctor.core.metrics import MetricsReport
 from memfs_doctor.core.replay import ReplayResult
+from memfs_doctor.core.reporting import ComparisonReport, HealthReport
 
 
 def render_sessions(sessions: list[SessionRecord]) -> str:
@@ -50,3 +51,45 @@ def render_replay(result: ReplayResult) -> str:
     lines.extend(result.timeline)
     return "\n".join(lines)
 
+
+def render_health_report(report: HealthReport, as_json: bool = False) -> str:
+    if as_json:
+        return json.dumps(report.to_dict(), indent=2, sort_keys=True)
+
+    lines = [
+        f"Session: {report.session_id}",
+        f"Framework: {report.framework}",
+        f"Agent: {report.agent_id}",
+        f"Status: {report.status}",
+        "Metrics:",
+    ]
+    for key, value in report.metrics.items():
+        lines.append(f"- {key}: {value}")
+    if report.findings:
+        lines.append("Findings:")
+        for finding in report.findings:
+            lines.append(f"- [{finding.severity}] {finding.metric}: {finding.message}")
+    return "\n".join(lines)
+
+
+def render_comparison_report(report: ComparisonReport, as_json: bool = False) -> str:
+    if as_json:
+        return json.dumps(report.to_dict(), indent=2, sort_keys=True)
+
+    lines = [
+        f"Baseline: {report.baseline_session_id}",
+        f"Candidate: {report.candidate_session_id}",
+        f"Regression count: {report.regression_count}",
+        "Deltas:",
+    ]
+    for metric, payload in report.deltas.items():
+        lines.append(
+            f"- {metric}: baseline={payload['baseline']} candidate={payload['candidate']} delta={payload['delta']}"
+        )
+    if report.regressions:
+        lines.append("Regressions:")
+        for item in report.regressions:
+            lines.append(
+                f"- {item['metric']}: baseline={item['baseline']} candidate={item['candidate']} delta={item['delta']}"
+            )
+    return "\n".join(lines)

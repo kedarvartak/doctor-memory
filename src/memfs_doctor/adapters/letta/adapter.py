@@ -85,6 +85,8 @@ class LettaTraceAdapter(BaseAdapter):
         return self._build_git_events(repo=repo, agent_id=agent_id, session_id=session_id)
 
     def start_session_capture(self, agent_id: str | None = None, memory_dir: str | Path | None = None) -> "LettaCapture":
+        if agent_id is None and memory_dir is None:
+            agent_id = self.state.get_default_agent_id()
         repo = self.resolve_memory_dir(agent_id=agent_id, memory_dir=memory_dir)
         resolved_agent_id = self._agent_id_from_memory_dir(repo)
         head_sha = self._git_output(repo, ["rev-parse", "HEAD"]).strip()
@@ -134,6 +136,9 @@ class LettaTraceAdapter(BaseAdapter):
 
     def list_captures(self) -> list["LettaCapture"]:
         return self.state.list_captures()
+
+    def latest_capture(self) -> "LettaCapture | None":
+        return self.state.latest_capture()
 
     def _build_git_events(
         self,
@@ -414,6 +419,20 @@ class LettaLocalState:
                         break
         return LettaSessionContext(agent_id=agent_id, conversation_id=conversation_id)
 
+    def get_default_agent_id(self) -> str:
+        if self.settings_path.exists():
+            try:
+                payload = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                payload = {}
+            last_agent = payload.get("lastAgent")
+            if isinstance(last_agent, str) and last_agent:
+                return last_agent
+        agents = [entry.name for entry in self.agents_dir.iterdir()] if self.agents_dir.exists() else []
+        if len(agents) == 1:
+            return agents[0]
+        raise AdapterError("Could not determine default Letta agent. Provide --agent <id>.")
+
     def save_capture(self, capture: "LettaCapture") -> None:
         self.captures_dir.mkdir(parents=True, exist_ok=True)
         path = self.captures_dir / f"{capture.capture_id}.json"
@@ -437,6 +456,34 @@ class LettaLocalState:
         for path in sorted(self.captures_dir.glob("*.json")):
             captures.append(LettaCapture.from_dict(json.loads(path.read_text(encoding="utf-8"))))
         return captures
+
+    def latest_capture(self) -> "LettaCapture | None":
+        captures = self.list_captures()
+        if not captures:
+            return None
+        captures.sort(key=lambda item: item.started_at, reverse=True)
+        return captures[0]
+
+    def save_capture_for_test(
+        self,
+        *,
+        capture_id: str,
+        agent_id: str,
+        memory_dir: Path,
+        base_head: str,
+        started_at: str,
+        conversation_id: str,
+    ) -> "LettaCapture":
+        capture = LettaCapture(
+            capture_id=capture_id,
+            agent_id=agent_id,
+            memory_dir=memory_dir,
+            base_head=base_head,
+            started_at=started_at,
+            conversation_id=conversation_id,
+        )
+        self.save_capture(capture)
+        return capture
 
 
 @dataclass(slots=True)

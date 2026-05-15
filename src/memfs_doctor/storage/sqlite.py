@@ -115,6 +115,10 @@ class SQLiteEventStore:
             for row in rows
         ]
 
+    def latest_session_ids(self, limit: int = 1) -> list[str]:
+        sessions = self.list_sessions()
+        return [session.session_id for session in sessions[:limit]]
+
     def get_session_events(self, session_id: str) -> list[MemoryEvent]:
         with self.connect() as conn:
             rows = conn.execute(
@@ -155,4 +159,3 @@ class SQLiteEventStore:
                 )
             )
         return events
-
