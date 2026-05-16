@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kedarvartak/doctor-memory/main/examples/banner.png" alt="MemOps banner">
+  <img src="https://raw.githubusercontent.com/kedarvartak/MemOps/main/examples/banner.png" alt="MemOps banner">
 </p>
 
 ## What Is MemOps?
@@ -51,21 +51,7 @@ MemOps turns those failures into inspectable signals, replayable traces, and reg
 
 ## Memory Evaluation Pipeline
 
-```text
-Agent Runtime
-      ↓
-Memory Event Capture
-      ↓
-Normalized Event Store
-      ↓
-Session Replay Engine
-      ↓
-Health Metric Computation
-      ↓
-Regression Detection
-      ↓
-Developer Reports + Dashboard
-```
+<img src="https://raw.githubusercontent.com/kedarvartak/MemOps/main/examples/memops.png" alt="MemOps flow">
 
 ## Memory Health Metrics
 
