@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kedarvartak/MemOps/main/examples/banner.png" alt="MemOps banner">
+  <img src="./examples/banner.png" alt="MemOps banner">
 </p>
 
 ## What Is MemOps?
@@ -51,7 +51,7 @@ MemOps turns those failures into inspectable signals, replayable traces, and reg
 
 ## Memory Evaluation Pipeline
 
-<img src="https://raw.githubusercontent.com/kedarvartak/MemOps/main/examples/memops.png" alt="MemOps flow">
+<img src="./examples/memops.png" alt="MemOps flow">
 
 ## Memory Health Metrics
 
