@@ -56,21 +56,22 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("path", help="Path to a JSONL trace file.")
     ingest.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework.")
 
-    subparsers.add_parser("sessions", help="List captured sessions.")
-    snapshots_cmd = subparsers.add_parser("health-snapshots", help="List per-turn health snapshots for a session or capture.")
+    subparsers.add_parser("sessions", aliases=["runs"], help="List captured sessions.")
+    snapshots_cmd = subparsers.add_parser("health-snapshots", aliases=["shots"], help="List per-turn health snapshots for a session or capture.")
     snapshots_cmd.add_argument("--session", required=True, help="Session or capture identifier.")
     snapshots_cmd.add_argument("--json", action="store_true")
 
-    dashboard_cmd = subparsers.add_parser("dashboard", help="Serve the local memory observability dashboard.")
+    dashboard_cmd = subparsers.add_parser("dashboard", aliases=["dash"], help="Serve the local memory observability dashboard.")
     dashboard_cmd.add_argument("--host", default="127.0.0.1")
     dashboard_cmd.add_argument("--port", default=8765, type=int)
 
-    subparsers.add_parser("letta-agents", help="List local Letta agents discovered under ~/.letta/agents.")
+    subparsers.add_parser("letta-agents", aliases=["agents"], help="List local Letta agents discovered under ~/.letta/agents.")
 
-    subparsers.add_parser("letta-captures", help="List pending Letta session captures.")
+    subparsers.add_parser("letta-captures", aliases=["captures"], help="List pending Letta session captures.")
 
     start_letta_capture = subparsers.add_parser(
         "start-letta-capture",
+        aliases=["capture"],
         help="Start a bounded capture window for a real Letta session.",
     )
     start_letta_capture.add_argument("--agent", help="Letta agent identifier under ~/.letta/agents. Defaults to the active Letta agent.")
@@ -78,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     record_letta_runtime = subparsers.add_parser(
         "record-letta-runtime",
+        aliases=["record"],
         help="Run Letta through a terminal recorder and emit a runtime JSONL trace for the active capture.",
     )
     record_letta_runtime.add_argument(
@@ -103,8 +105,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Command to run after --, for example: -- letta",
     )
 
+    chat_cmd = subparsers.add_parser(
+        "chat",
+        help="Start capture, run a wrapped Letta session, and auto-finish it in one command.",
+    )
+    chat_cmd.add_argument("--agent", help="Letta agent identifier under ~/.letta/agents. Defaults to the active Letta agent.")
+    chat_cmd.add_argument("--memory-dir", help="Explicit path to a Letta memory directory.")
+    chat_cmd.add_argument(
+        "--trace-path",
+        help="Optional output path for the runtime JSONL trace. Defaults to .memfs_doctor/runtime/<capture-id>.jsonl",
+    )
+    chat_cmd.add_argument(
+        "--structured-trace-path",
+        help="Optional structured retrieval sidecar path. Defaults to .memfs_doctor/runtime/<capture-id>.structured.jsonl",
+    )
+    chat_cmd.add_argument(
+        "runtime_command",
+        nargs=argparse.REMAINDER,
+        help="Command to run after --, for example: -- letta",
+    )
+
     finish_letta_capture = subparsers.add_parser(
         "finish-letta-capture",
+        aliases=["finish"],
         help="Finish a bounded Letta session capture and ingest events into the local store.",
     )
     finish_letta_capture.add_argument(
@@ -123,34 +146,34 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_letta_agent.add_argument("--agent", help="Letta agent identifier under ~/.letta/agents.")
     ingest_letta_agent.add_argument("--memory-dir", help="Explicit path to a Letta memory directory.")
 
-    inspect_cmd = subparsers.add_parser("inspect", help="Inspect a session and basic event info.")
+    inspect_cmd = subparsers.add_parser("inspect", aliases=["session"], help="Inspect a session and basic event info.")
     inspect_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
 
-    metrics_cmd = subparsers.add_parser("metrics", help="Compute metrics for a session.")
+    metrics_cmd = subparsers.add_parser("metrics", aliases=["stats"], help="Compute metrics for a session.")
     metrics_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
     metrics_cmd.add_argument("--json", action="store_true", help="Render metrics as JSON.")
 
-    report_cmd = subparsers.add_parser("report", help="Generate a health report for a session.")
+    report_cmd = subparsers.add_parser("report", aliases=["health"], help="Generate a health report for a session.")
     report_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
     report_cmd.add_argument("--thresholds", help="Optional JSON threshold config path.")
     report_cmd.add_argument("--json", action="store_true", help="Render report as JSON.")
     report_cmd.add_argument("--out", help="Optional path to export the report JSON.")
 
-    check_session_cmd = subparsers.add_parser("check-session", help="Fail with a non-zero exit code when a session breaches memory health thresholds.")
+    check_session_cmd = subparsers.add_parser("check-session", aliases=["gate"], help="Fail with a non-zero exit code when a session breaches memory health thresholds.")
     check_session_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
     check_session_cmd.add_argument("--thresholds", help="Optional JSON threshold config path.")
     check_session_cmd.add_argument("--fail-on", choices=["error", "warning"], default="error")
     check_session_cmd.add_argument("--json", action="store_true", help="Render check result as JSON.")
     check_session_cmd.add_argument("--out", help="Optional path to export the check result JSON.")
 
-    compare_cmd = subparsers.add_parser("compare-sessions", help="Compare two session health reports.")
+    compare_cmd = subparsers.add_parser("compare-sessions", aliases=["compare"], help="Compare two session health reports.")
     compare_cmd.add_argument("--baseline", help="Baseline session identifier. Defaults to the second-latest stored session.")
     compare_cmd.add_argument("--candidate", help="Candidate session identifier. Defaults to the latest stored session.")
     compare_cmd.add_argument("--regression-thresholds", help="Optional JSON regression threshold config path.")
     compare_cmd.add_argument("--json", action="store_true", help="Render comparison as JSON.")
     compare_cmd.add_argument("--out", help="Optional path to export the comparison JSON.")
 
-    check_regression_cmd = subparsers.add_parser("check-regression", help="Fail with a non-zero exit code when candidate memory health regresses beyond tolerance.")
+    check_regression_cmd = subparsers.add_parser("check-regression", aliases=["regress"], help="Fail with a non-zero exit code when candidate memory health regresses beyond tolerance.")
     check_regression_cmd.add_argument("--baseline", help="Baseline session identifier. Defaults to the second-latest stored session.")
     check_regression_cmd.add_argument("--candidate", help="Candidate session identifier. Defaults to the latest stored session.")
     check_regression_cmd.add_argument("--regression-thresholds", help="Optional JSON regression threshold config path.")
@@ -158,18 +181,18 @@ def build_parser() -> argparse.ArgumentParser:
     check_regression_cmd.add_argument("--json", action="store_true", help="Render check result as JSON.")
     check_regression_cmd.add_argument("--out", help="Optional path to export the check result JSON.")
 
-    retrieval_cmd = subparsers.add_parser("inspect-retrieval", help="Inspect retrieval causality and recall quality.")
+    retrieval_cmd = subparsers.add_parser("inspect-retrieval", aliases=["retrieval"], help="Inspect retrieval causality and recall quality.")
     retrieval_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
     retrieval_cmd.add_argument("--step", type=int, help="Optional retrieval step to inspect as a single JSON object.")
     retrieval_cmd.add_argument("--json", action="store_true", help="Render inspection as JSON.")
 
-    replay_cmd = subparsers.add_parser("replay", help="Replay a session timeline.")
+    replay_cmd = subparsers.add_parser("replay", aliases=["timeline"], help="Replay a session timeline.")
     replay_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
     replay_cmd.add_argument("--trace-path", help="Optional trace file path for offline replay instead of a stored session.")
     replay_cmd.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework for --trace-path.")
     replay_cmd.add_argument("--json", action="store_true", help="Render replay as JSON.")
 
-    step_cmd = subparsers.add_parser("inspect-step", help="Inspect a specific replay step and memory state.")
+    step_cmd = subparsers.add_parser("inspect-step", aliases=["step"], help="Inspect a specific replay step and memory state.")
     step_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
     step_cmd.add_argument("--trace-path", help="Optional trace file path for offline step inspection.")
     step_cmd.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework for --trace-path.")
@@ -320,28 +343,30 @@ def cmd_start_letta_capture(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
-    adapter = LettaTraceAdapter()
-    resolved_capture_id = _resolve_capture_id(adapter, args.capture_id)
-    capture = next((item for item in adapter.list_captures() if item.capture_id == resolved_capture_id), None)
-    if capture is None:
-        raise SystemExit(f"Unknown capture id: {resolved_capture_id}")
-
-    command = list(args.runtime_command)
+def _run_wrapped_capture(
+    *,
+    store: SQLiteEventStore,
+    adapter: LettaTraceAdapter,
+    capture,
+    runtime_command: list[str],
+    trace_path_arg: str | None,
+    structured_trace_path_arg: str | None,
+    auto_finish: bool,
+) -> int:
+    command = list(runtime_command)
     if command and command[0] == "--":
         command = command[1:]
     if not command:
         command = ["letta"]
 
-    output_path = Path(args.trace_path) if args.trace_path else default_runtime_trace_path(Path.cwd(), capture.capture_id)
+    output_path = Path(trace_path_arg) if trace_path_arg else default_runtime_trace_path(Path.cwd(), capture.capture_id)
     structured_trace_path = (
-        Path(args.structured_trace_path)
-        if args.structured_trace_path
+        Path(structured_trace_path_arg)
+        if structured_trace_path_arg
         else default_structured_trace_path(Path.cwd(), capture.capture_id)
     )
     transcript_path = default_transcript_path(Path.cwd(), capture.capture_id)
     debug_log_path = Path.cwd() / ".memfs_doctor" / "dashboard" / f"{capture.capture_id}.live-errors.log"
-    store = _store_from_args(args)
     store.init_db()
 
     def handle_turn(*, turn, turns, lines) -> None:
@@ -402,7 +427,7 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
     print(f"Persisted {snapshot_count} health snapshots for {capture.capture_id}")
     print(f"Reopened database sees {reopened_snapshot_count} health snapshots for {capture.capture_id}")
 
-    if args.auto_finish:
+    if auto_finish:
         merged_events = adapter.finish_session_capture(capture.capture_id, runtime_trace_path=trace_path)
         ingested = store.ingest_events(merged_events)
         print(f"Ingested {ingested} events from Letta session capture {capture.capture_id}")
@@ -410,6 +435,44 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         print(f"Post-finish database sees {post_finish_snapshot_count} health snapshots for {capture.capture_id}")
 
     return exit_code
+
+
+def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
+    adapter = LettaTraceAdapter()
+    resolved_capture_id = _resolve_capture_id(adapter, args.capture_id)
+    capture = next((item for item in adapter.list_captures() if item.capture_id == resolved_capture_id), None)
+    if capture is None:
+        raise SystemExit(f"Unknown capture id: {resolved_capture_id}")
+
+    store = _store_from_args(args)
+    return _run_wrapped_capture(
+        store=store,
+        adapter=adapter,
+        capture=capture,
+        runtime_command=args.runtime_command,
+        trace_path_arg=args.trace_path,
+        structured_trace_path_arg=args.structured_trace_path,
+        auto_finish=args.auto_finish,
+    )
+
+
+def cmd_chat(args: argparse.Namespace) -> int:
+    adapter = LettaTraceAdapter()
+    capture = adapter.start_session_capture(agent_id=args.agent, memory_dir=args.memory_dir)
+    print(
+        f"Started Letta capture {capture.capture_id} agent={capture.agent_id} "
+        f"conversation={capture.conversation_id} base_head={capture.base_head[:12]}"
+    )
+    store = _store_from_args(args)
+    return _run_wrapped_capture(
+        store=store,
+        adapter=adapter,
+        capture=capture,
+        runtime_command=args.runtime_command,
+        trace_path_arg=args.trace_path,
+        structured_trace_path_arg=args.structured_trace_path,
+        auto_finish=True,
+    )
 
 
 def cmd_finish_letta_capture(args: argparse.Namespace) -> int:
@@ -695,23 +758,41 @@ def main(argv: list[str] | None = None) -> int:
         "init-db": cmd_init_db,
         "ingest": cmd_ingest,
         "sessions": cmd_sessions,
+        "runs": cmd_sessions,
         "health-snapshots": cmd_health_snapshots,
+        "shots": cmd_health_snapshots,
         "dashboard": cmd_dashboard,
+        "dash": cmd_dashboard,
         "letta-agents": cmd_letta_agents,
+        "agents": cmd_letta_agents,
         "letta-captures": cmd_letta_captures,
+        "captures": cmd_letta_captures,
         "start-letta-capture": cmd_start_letta_capture,
+        "capture": cmd_start_letta_capture,
         "record-letta-runtime": cmd_record_letta_runtime,
+        "record": cmd_record_letta_runtime,
+        "chat": cmd_chat,
         "finish-letta-capture": cmd_finish_letta_capture,
+        "finish": cmd_finish_letta_capture,
         "ingest-letta-agent": cmd_ingest_letta_agent,
         "inspect": cmd_inspect,
+        "session": cmd_inspect,
         "metrics": cmd_metrics,
+        "stats": cmd_metrics,
         "report": cmd_report,
+        "health": cmd_report,
         "check-session": cmd_check_session,
+        "gate": cmd_check_session,
         "compare-sessions": cmd_compare_sessions,
+        "compare": cmd_compare_sessions,
         "check-regression": cmd_check_regression,
+        "regress": cmd_check_regression,
         "inspect-retrieval": cmd_inspect_retrieval,
+        "retrieval": cmd_inspect_retrieval,
         "replay": cmd_replay,
+        "timeline": cmd_replay,
         "inspect-step": cmd_inspect_step,
+        "step": cmd_inspect_step,
         "diff": cmd_diff,
     }
     return command_map[args.command](args)

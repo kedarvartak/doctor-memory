@@ -17,6 +17,43 @@ For every implementation increment:
 - define a manual validation checklist for real behavior that unit tests cannot prove
 - do not move to the next roadmap item until the current gate passes
 
+## Preferred Short Commands
+
+The full command names remain supported, but the preferred UX is now the short command layer.
+
+Common shortcuts:
+
+- `doctor dash`
+  Start the local dashboard
+- `doctor agents`
+  List local Letta agents
+- `doctor captures`
+  List pending bounded captures
+- `doctor capture`
+  Start a bounded Letta capture
+- `doctor record`
+  Wrap an existing capture around a Letta terminal run
+- `doctor finish`
+  Finish a bounded capture into the local store
+- `doctor chat`
+  Start capture, run Letta, and auto-finish in one command
+- `doctor runs`
+  List stored sessions
+- `doctor health`
+  Generate a session health report
+- `doctor compare`
+  Compare two sessions
+- `doctor regress`
+  Run regression gate logic
+- `doctor retrieval`
+  Inspect retrieval quality and causality
+- `doctor timeline`
+  Replay a session timeline
+- `doctor step`
+  Inspect one replay step
+- `doctor shots`
+  Inspect per-turn health snapshots
+
 ## Automated Test Gate
 
 ### Current Baseline Commands
@@ -25,9 +62,9 @@ Run these after every meaningful implementation change unless a narrower command
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --help
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
+doctor --help
+doctor agents
+doctor captures
 ```
 
 ### Current End-To-End CLI Check
@@ -35,12 +72,12 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
 This validates the local event store, ingestion path, metrics, and replay path:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-test.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-test.db ingest examples/letta_session.jsonl --framework letta
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-test.db inspect --session session-001
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-test.db metrics --session session-001 --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-test.db replay --session session-001
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-test.db diff --session session-001 --before-step 2 --after-step 6
+doctor --db /tmp/memfs-doctor-test.db init-db
+doctor --db /tmp/memfs-doctor-test.db ingest examples/letta_session.jsonl --framework letta
+doctor --db /tmp/memfs-doctor-test.db session --session session-001
+doctor --db /tmp/memfs-doctor-test.db stats --session session-001 --json
+doctor --db /tmp/memfs-doctor-test.db timeline --session session-001
+doctor --db /tmp/memfs-doctor-test.db diff --session session-001 --before-step 2 --after-step 6
 ```
 
 ### Expected Current Assertions
@@ -164,12 +201,12 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db ingest-letta-agent --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db sessions
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-manual.db replay --session <session-id>
+doctor agents
+doctor --db /tmp/memfs-doctor-manual.db init-db
+doctor --db /tmp/memfs-doctor-manual.db ingest-letta-agent --agent <agent-id>
+doctor --db /tmp/memfs-doctor-manual.db runs
+doctor --db /tmp/memfs-doctor-manual.db stats --session <session-id> --json
+doctor --db /tmp/memfs-doctor-manual.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -202,11 +239,11 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db ingest-letta-agent --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db sessions
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-duplicate.db replay --session <session-id>
+doctor --db /tmp/memfs-doctor-duplicate.db init-db
+doctor --db /tmp/memfs-doctor-duplicate.db ingest-letta-agent --agent <agent-id>
+doctor --db /tmp/memfs-doctor-duplicate.db runs
+doctor --db /tmp/memfs-doctor-duplicate.db stats --session <session-id> --json
+doctor --db /tmp/memfs-doctor-duplicate.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -236,10 +273,10 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db ingest-letta-agent --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-contradiction.db replay --session <session-id>
+doctor --db /tmp/memfs-doctor-contradiction.db init-db
+doctor --db /tmp/memfs-doctor-contradiction.db ingest-letta-agent --agent <agent-id>
+doctor --db /tmp/memfs-doctor-contradiction.db stats --session <session-id> --json
+doctor --db /tmp/memfs-doctor-contradiction.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -289,12 +326,12 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db ingest-letta-agent --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db sessions
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-live.db replay --session <session-id>
+doctor agents
+doctor --db /tmp/memfs-doctor-live.db init-db
+doctor --db /tmp/memfs-doctor-live.db ingest-letta-agent --agent <agent-id>
+doctor --db /tmp/memfs-doctor-live.db runs
+doctor --db /tmp/memfs-doctor-live.db stats --session <session-id> --json
+doctor --db /tmp/memfs-doctor-live.db timeline --session <session-id>
 ```
 
 Expected result:
@@ -315,14 +352,14 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
-PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+doctor agents
+doctor capture --agent <agent-id>
 # run a real Letta session here that changes memory
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture --capture-id <capture-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db sessions
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect --session <session-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db replay --session <session-id>
+doctor captures
+doctor --db .memfs_doctor/session.db finish --capture-id <capture-id>
+doctor --db .memfs_doctor/session.db runs
+doctor --db .memfs_doctor/session.db session --session <session-id>
+doctor --db .memfs_doctor/session.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -350,14 +387,14 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
+doctor capture --agent <agent-id>
 # run a real Letta session here that causes at least one recall and one miss
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture \
+doctor --db .memfs_doctor/session.db finish \
   --capture-id <capture-id> \
   --runtime-trace <path-to-runtime-trace.jsonl>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect --session <session-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db replay --session <session-id>
+doctor --db .memfs_doctor/session.db session --session <session-id>
+doctor --db .memfs_doctor/session.db stats --session <session-id> --json
+doctor --db .memfs_doctor/session.db timeline --session <session-id>
 ```
 
 Suggested runtime trace contents:
@@ -387,14 +424,10 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db record-letta-runtime \
-  --capture-id <capture-id> \
-  --auto-finish \
-  -- letta
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect --session <session-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db replay --session <session-id>
+doctor --db .memfs_doctor/session.db chat -- letta
+doctor --db .memfs_doctor/session.db session --session <session-id>
+doctor --db .memfs_doctor/session.db stats --session <session-id> --json
+doctor --db .memfs_doctor/session.db timeline --session <session-id>
 ```
 
 Suggested Letta interaction:
@@ -432,7 +465,7 @@ Suggested Letta flow:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db report \
+doctor --db .memfs_doctor/session.db health \
   --session <session-id> \
   --json
 ```
@@ -459,7 +492,7 @@ Suggested setup:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db compare-sessions \
+doctor --db .memfs_doctor/session.db compare \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --json
@@ -486,11 +519,11 @@ Suggested setup:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
+doctor --db .memfs_doctor/session.db retrieval \
   --session <session-id> \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
+doctor --db .memfs_doctor/session.db retrieval \
   --session <session-id> \
   --step <retrieval-step>
 ```
@@ -520,21 +553,21 @@ Suggested setup:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main replay \
+doctor timeline \
   --session <session-id>
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main inspect-step \
+doctor step \
   --session <session-id> \
   --step <step-number> \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main diff \
+doctor diff \
   --session <session-id> \
   --before-step <earlier-step> \
   --after-step <later-step> \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main replay \
+doctor timeline \
   --trace-path examples/letta_session.jsonl \
   --json
 ```
@@ -563,22 +596,22 @@ Suggested setup:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db init-db
+doctor --db /tmp/memfs-doctor-phase6.db init-db
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db ingest \
+doctor --db /tmp/memfs-doctor-phase6.db ingest \
   examples/letta_session.jsonl \
   --framework letta
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db check-session \
+doctor --db /tmp/memfs-doctor-phase6.db gate \
   --session session-001 \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db report \
+doctor --db /tmp/memfs-doctor-phase6.db health \
   --session session-001 \
   --thresholds examples/phase6_thresholds.json \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db check-regression \
+doctor --db .memfs_doctor/session.db regress \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --regression-thresholds examples/phase6_thresholds.json \
@@ -603,13 +636,11 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-dashboard.db start-letta-capture --agent <agent-id>
+doctor --db /tmp/memfs-doctor-dashboard.db capture --agent <agent-id>
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-dashboard.db dashboard
+doctor --db /tmp/memfs-doctor-dashboard.db dash
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-dashboard.db record-letta-runtime \
-  --auto-finish \
-  -- letta
+doctor --db /tmp/memfs-doctor-dashboard.db chat -- letta
 ```
 
 Manual validation:
@@ -632,13 +663,11 @@ Goal:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db dashboard
+doctor --db .memfs_doctor/session.db dash
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db start-letta-capture --agent <agent-id>
+doctor --db .memfs_doctor/session.db capture --agent <agent-id>
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db record-letta-runtime \
-  --auto-finish \
-  -- letta
+doctor --db .memfs_doctor/session.db chat -- letta
 ```
 
 Manual validation:

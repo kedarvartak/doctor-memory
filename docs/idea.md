@@ -319,11 +319,11 @@ The first UX should be CLI-first.
 Potential commands:
 
 ```bash
-memfs-doctor inspect --framework letta --agent <id>
-memfs-doctor metrics --session <id>
-memfs-doctor replay --session <id>
-memfs-doctor diff --session <id> --step 14 --step 28
-memfs-doctor export --session <id> --format jsonl
+doctor session --framework letta --agent <id>
+doctor stats --session <id>
+doctor timeline --session <id>
+doctor diff --session <id> --step 14 --step 28
+doctor export --session <id> --format jsonl
 ```
 
 Outputs should be both human-readable and machine-consumable.
