@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "memfs-doctor"
+name = "memops"
 version = "0.1.0"
 description = "Observability and replay infrastructure for persistent AI memory systems."
 readme = "README.md"
@@ -14,9 +14,7 @@ authors = [
 dependencies = []
 
 [project.scripts]
-memfs-doctor = "memfs_doctor.cli.main:main"
-doctor = "memfs_doctor.cli.main:main"
-mfd = "memfs_doctor.cli.main:main"
+memops = "memfs_doctor.cli.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

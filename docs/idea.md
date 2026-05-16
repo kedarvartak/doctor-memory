@@ -1,8 +1,8 @@
-# MemFS Doctor
+# MemOps
 
 ## Positioning
 
-MemFS Doctor is a plug-and-play observability, diagnostics, and reliability layer for persistent AI memory systems.
+MemOps is a plug-and-play observability, diagnostics, and reliability layer for persistent AI memory systems.
 
 It should not be positioned as a Letta-specific utility. Letta is the first high-quality integration target because it already exposes the right class of stateful agent behavior, but the product itself should remain framework-neutral. The long-term category is closer to "Datadog for agent memory" and "replay debugger for memory mutations" than "memory cleanup script."
 
@@ -23,7 +23,7 @@ Persistent agents fail silently when memory quality degrades. Existing framework
 - regression tracking across sessions
 - framework-neutral memory diagnostics
 
-MemFS Doctor exists to make agent memory observable, debuggable, and eventually self-healing.
+MemOps exists to make agent memory observable, debuggable, and eventually self-healing.
 
 ## Initial Scope
 
@@ -319,11 +319,11 @@ The first UX should be CLI-first.
 Potential commands:
 
 ```bash
-doctor session --framework letta --agent <id>
-doctor stats --session <id>
-doctor timeline --session <id>
-doctor diff --session <id> --step 14 --step 28
-doctor export --session <id> --format jsonl
+memops session --framework letta --agent <id>
+memops stats --session <id>
+memops timeline --session <id>
+memops diff --session <id> --step 14 --step 28
+memops export --session <id> --format jsonl
 ```
 
 Outputs should be both human-readable and machine-consumable.

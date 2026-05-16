@@ -36,7 +36,7 @@ Next:
 ## 2026-05-15 | v0.1.0-docs-foundation
 
 Type: docs
-Summary: Established the initial documentation base for MemFS Doctor as framework-neutral memory observability and replay infrastructure.
+Summary: Established the initial documentation base for MemOps as framework-neutral memory observability and replay infrastructure.
 
 Changes:
 - Created `docs/idea.md` to define product positioning, core thesis, architecture direction, event model direction, and Letta-first but framework-neutral strategy.
@@ -151,7 +151,7 @@ Changes:
 
 Reason:
 - Git-backed MemFS history alone cannot satisfy the Phase 2 trace-detail requirement around recalls, misses, and timing metadata.
-- A merge path lets MemFS Doctor consume richer Letta runtime traces when those artifacts are available without changing the existing session-capture model.
+- A merge path lets MemOps consume richer Letta runtime traces when those artifacts are available without changing the existing session-capture model.
 
 Next:
 - Identify or enable a real Letta runtime export path so retrieval and miss events come from actual Letta runs rather than synthetic JSONL fixtures.

@@ -1,4 +1,4 @@
-<h1 align="center">MemFS Doctor</h1>
+<h1 align="center">MemOps</h1>
 
 <p align="center">
   Observability, replay, and regression analysis for persistent AI memory systems.
@@ -13,16 +13,16 @@
 </p>
 
 <p align="center">
-  <img src="examples/banner.png" alt="MemFS Doctor banner">
+  <img src="examples/banner.png" alt="MemOps banner">
 </p>
 
-## What MemFS Doctor Is
+## What MemOps Is
 
-MemFS Doctor is a Python-first developer tool for inspecting, measuring, and comparing the memory behavior of AI agents that persist information across sessions.
+MemOps is a Python-first developer tool for inspecting, measuring, and comparing the memory behavior of AI agents that persist information across sessions.
 
 The product exists to answer a practical problem: once an agent has memory, it can fail in subtle ways that are hard to diagnose. It may retrieve nothing when it should remember, retrieve the wrong thing, rewrite memory too aggressively, carry stale facts forward, or become slow under memory pressure. Most teams can feel these problems during testing, but they lack a durable way to capture what happened, replay it, and compare one run against another.
 
-MemFS Doctor is built to close that gap. It turns raw memory activity into a normalized event stream, stores it locally, reconstructs session history, computes memory-health metrics, and produces reports that make baseline-versus-candidate evaluation concrete.
+MemOps is built to close that gap. It turns raw memory activity into a normalized event stream, stores it locally, reconstructs session history, computes memory-health metrics, and produces reports that make baseline-versus-candidate evaluation concrete.
 
 ## Why This Product Exists
 
@@ -34,7 +34,7 @@ Traditional observability stacks are strong at API latency, logs, and infrastruc
 - Are memory recalls slow, empty, noisy, or stale?
 - Did the latest candidate regress against the previous known-good behavior?
 
-MemFS Doctor treats agent memory as a system that deserves the same rigor as any other production subsystem. The goal is not only to collect traces, but to make those traces actionable for debugging, evaluation, and release decisions.
+MemOps treats agent memory as a system that deserves the same rigor as any other production subsystem. The goal is not only to collect traces, but to make those traces actionable for debugging, evaluation, and release decisions.
 
 ## Product Goal
 
@@ -51,7 +51,7 @@ The current implementation is CLI-first and Letta-first by design. That keeps th
 
 ## Core Idea
 
-MemFS Doctor sits between raw framework behavior and developer judgment.
+MemOps sits between raw framework behavior and developer judgment.
 
 Instead of relying on intuition like "this run felt worse," it gives you a repeatable pipeline:
 
@@ -66,7 +66,7 @@ This makes memory behavior testable in the same way teams already test latency, 
 
 ## How Memory Degradation Is Determined
 
-MemFS Doctor does not decide that memory is degraded because one answer felt odd. It looks for measurable signs that the memory system is becoming unstable, inconsistent, ineffective, or slow.
+MemOps does not decide that memory is degraded because one answer felt odd. It looks for measurable signs that the memory system is becoming unstable, inconsistent, ineffective, or slow.
 
 The main parameters are:
 
@@ -129,7 +129,7 @@ The current dashboard focuses on:
 
 ## What Exists Today
 
-MemFS Doctor already has a real working core:
+MemOps already has a real working core:
 
 - normalized append-only memory events
 - local trace storage and replay
@@ -155,9 +155,15 @@ For setup, CLI usage, capture workflows, testing procedures, and implementation 
 - [docs/testing.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/testing.md)
 - [docs/versioning.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/versioning.md)
 
+Recommended local install:
+
+```bash
+uv pip install -e .
+```
+
 ## Development Philosophy
 
-MemFS Doctor is being built with a narrow, deliberate scope:
+MemOps is being built with a narrow, deliberate scope:
 
 - Python-first
 - framework-neutral at the core

@@ -325,7 +325,7 @@ function App() {
   }, [replay, retrievals, snapshots]);
 
   if (!overview.sessions.length) {
-    return h("div", { className: "loading-state" }, "Waiting for MemFS Doctor session data...");
+    return h("div", { className: "loading-state" }, "Waiting for MemOps session data...");
   }
 
   return h(
@@ -337,7 +337,7 @@ function App() {
       h(
         "div",
         { className: "brand" },
-        h("div", { className: "brand-kicker" }, "MemFS Doctor"),
+        h("div", { className: "brand-kicker" }, "MemOps"),
         h("div", { className: "brand-title" }, "AI Agent Observability"),
         h(
           "div",

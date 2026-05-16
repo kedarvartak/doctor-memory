@@ -46,7 +46,7 @@ from memfs_doctor.storage.sqlite import SQLiteEventStore
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="memfs-doctor")
+    parser = argparse.ArgumentParser(prog="memops")
     parser.add_argument("--db", default=None, help="Path to the SQLite database.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -141,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest_letta_agent = subparsers.add_parser(
         "ingest-letta-agent",
-        help="Ingest events reconstructed from a local Letta MemFS git repository.",
+        help="Ingest events reconstructed from a local Letta memory git repository.",
     )
     ingest_letta_agent.add_argument("--agent", help="Letta agent identifier under ~/.letta/agents.")
     ingest_letta_agent.add_argument("--memory-dir", help="Explicit path to a Letta memory directory.")
@@ -295,7 +295,7 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
     store.init_db()
     server = create_dashboard_server(args.host, args.port, store=store)
-    print(f"MemFS Doctor dashboard listening on http://{args.host}:{args.port}")
+    print(f"MemOps dashboard listening on http://{args.host}:{args.port}")
     print(f"Dashboard database: {store.db_path}")
     try:
         server.serve_forever()

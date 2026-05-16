@@ -23,35 +23,35 @@ The full command names remain supported, but the preferred UX is now the short c
 
 Common shortcuts:
 
-- `doctor dash`
+- `memops dash`
   Start the local dashboard
-- `doctor agents`
+- `memops agents`
   List local Letta agents
-- `doctor captures`
+- `memops captures`
   List pending bounded captures
-- `doctor capture`
+- `memops capture`
   Start a bounded Letta capture
-- `doctor record`
+- `memops record`
   Wrap an existing capture around a Letta terminal run
-- `doctor finish`
+- `memops finish`
   Finish a bounded capture into the local store
-- `doctor chat`
+- `memops chat`
   Start capture, run Letta, and auto-finish in one command
-- `doctor runs`
+- `memops runs`
   List stored sessions
-- `doctor health`
+- `memops health`
   Generate a session health report
-- `doctor compare`
+- `memops compare`
   Compare two sessions
-- `doctor regress`
+- `memops regress`
   Run regression gate logic
-- `doctor retrieval`
+- `memops retrieval`
   Inspect retrieval quality and causality
-- `doctor timeline`
+- `memops timeline`
   Replay a session timeline
-- `doctor step`
+- `memops step`
   Inspect one replay step
-- `doctor shots`
+- `memops shots`
   Inspect per-turn health snapshots
 
 ## Automated Test Gate
@@ -61,10 +61,10 @@ Common shortcuts:
 Run these after every meaningful implementation change unless a narrower command is clearly sufficient:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests
-doctor --help
-doctor agents
-doctor captures
+uv run python3 -m unittest discover -s tests
+memops --help
+memops agents
+memops captures
 ```
 
 ### Current End-To-End CLI Check
@@ -72,12 +72,12 @@ doctor captures
 This validates the local event store, ingestion path, metrics, and replay path:
 
 ```bash
-doctor --db /tmp/memfs-doctor-test.db init-db
-doctor --db /tmp/memfs-doctor-test.db ingest examples/letta_session.jsonl --framework letta
-doctor --db /tmp/memfs-doctor-test.db session --session session-001
-doctor --db /tmp/memfs-doctor-test.db stats --session session-001 --json
-doctor --db /tmp/memfs-doctor-test.db timeline --session session-001
-doctor --db /tmp/memfs-doctor-test.db diff --session session-001 --before-step 2 --after-step 6
+memops --db /tmp/memops-test.db init-db
+memops --db /tmp/memops-test.db ingest examples/letta_session.jsonl --framework letta
+memops --db /tmp/memops-test.db session --session session-001
+memops --db /tmp/memops-test.db stats --session session-001 --json
+memops --db /tmp/memops-test.db timeline --session session-001
+memops --db /tmp/memops-test.db diff --session session-001 --before-step 2 --after-step 6
 ```
 
 ### Expected Current Assertions
@@ -142,7 +142,7 @@ Every implementation phase should add or update a manual test checklist with:
 - setup prerequisites
 - exact test prompts or session flows
 - expected behavior in Letta
-- expected MemFS Doctor output characteristics
+- expected MemOps output characteristics
 - pass/fail notes
 
 ## Manual Test Matrix
@@ -201,12 +201,12 @@ Goal:
 Commands:
 
 ```bash
-doctor agents
-doctor --db /tmp/memfs-doctor-manual.db init-db
-doctor --db /tmp/memfs-doctor-manual.db ingest-letta-agent --agent <agent-id>
-doctor --db /tmp/memfs-doctor-manual.db runs
-doctor --db /tmp/memfs-doctor-manual.db stats --session <session-id> --json
-doctor --db /tmp/memfs-doctor-manual.db timeline --session <session-id>
+memops agents
+memops --db /tmp/memops-manual.db init-db
+memops --db /tmp/memops-manual.db ingest-letta-agent --agent <agent-id>
+memops --db /tmp/memops-manual.db runs
+memops --db /tmp/memops-manual.db stats --session <session-id> --json
+memops --db /tmp/memops-manual.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -218,10 +218,10 @@ Suggested Letta session flow:
 3. ask three recall questions about those facts
 4. end the session
 5. export or capture the session trace
-6. ingest the trace into MemFS Doctor
+6. ingest the trace into MemOps
 7. run `metrics` and `replay`
 
-Expected MemFS Doctor result:
+Expected MemOps result:
 - duplicate rate should be low, ideally `0`
 - contradiction score should be `0`
 - empty retrieval rate should be low
@@ -239,11 +239,11 @@ Goal:
 Commands:
 
 ```bash
-doctor --db /tmp/memfs-doctor-duplicate.db init-db
-doctor --db /tmp/memfs-doctor-duplicate.db ingest-letta-agent --agent <agent-id>
-doctor --db /tmp/memfs-doctor-duplicate.db runs
-doctor --db /tmp/memfs-doctor-duplicate.db stats --session <session-id> --json
-doctor --db /tmp/memfs-doctor-duplicate.db timeline --session <session-id>
+memops --db /tmp/memops-duplicate.db init-db
+memops --db /tmp/memops-duplicate.db ingest-letta-agent --agent <agent-id>
+memops --db /tmp/memops-duplicate.db runs
+memops --db /tmp/memops-duplicate.db stats --session <session-id> --json
+memops --db /tmp/memops-duplicate.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -257,7 +257,7 @@ Suggested Letta session flow:
 5. ingest the trace
 6. run `metrics` and `replay`
 
-Expected MemFS Doctor result:
+Expected MemOps result:
 - duplicate rate increases above the stable baseline
 - replay highlights the first duplicate-introducing event
 - event timeline makes it obvious which write caused the duplication
@@ -273,10 +273,10 @@ Goal:
 Commands:
 
 ```bash
-doctor --db /tmp/memfs-doctor-contradiction.db init-db
-doctor --db /tmp/memfs-doctor-contradiction.db ingest-letta-agent --agent <agent-id>
-doctor --db /tmp/memfs-doctor-contradiction.db stats --session <session-id> --json
-doctor --db /tmp/memfs-doctor-contradiction.db timeline --session <session-id>
+memops --db /tmp/memops-contradiction.db init-db
+memops --db /tmp/memops-contradiction.db ingest-letta-agent --agent <agent-id>
+memops --db /tmp/memops-contradiction.db stats --session <session-id> --json
+memops --db /tmp/memops-contradiction.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -290,7 +290,7 @@ Suggested Letta session flow:
 6. ingest the trace
 7. run `metrics` and `replay`
 
-Expected MemFS Doctor result:
+Expected MemOps result:
 - contradiction score increases above baseline
 - replay points to the first conflicting write event
 - retrieval review should show the affected city-related memory path
@@ -311,7 +311,7 @@ Suggested Letta session flow:
 5. ingest the trace
 6. run `metrics`
 
-Expected MemFS Doctor result:
+Expected MemOps result:
 - empty retrieval rate or retrieval miss indicators increase
 - no false successful recall should appear for that question
 
@@ -321,17 +321,17 @@ Pass condition:
 ### Manual Test 7: Local Letta Discovery And Import
 
 Goal:
-- confirm that MemFS Doctor can discover a real local Letta agent and import its MemFS git history without hand-built trace files
+- confirm that MemOps can discover a real local Letta agent and import its MemFS git history without hand-built trace files
 
 Commands:
 
 ```bash
-doctor agents
-doctor --db /tmp/memfs-doctor-live.db init-db
-doctor --db /tmp/memfs-doctor-live.db ingest-letta-agent --agent <agent-id>
-doctor --db /tmp/memfs-doctor-live.db runs
-doctor --db /tmp/memfs-doctor-live.db stats --session <session-id> --json
-doctor --db /tmp/memfs-doctor-live.db timeline --session <session-id>
+memops agents
+memops --db /tmp/memops-live.db init-db
+memops --db /tmp/memops-live.db ingest-letta-agent --agent <agent-id>
+memops --db /tmp/memops-live.db runs
+memops --db /tmp/memops-live.db stats --session <session-id> --json
+memops --db /tmp/memops-live.db timeline --session <session-id>
 ```
 
 Expected result:
@@ -347,19 +347,19 @@ Pass condition:
 ### Manual Test 8: Bounded Real Letta Session Capture
 
 Goal:
-- confirm that MemFS Doctor captures one real Letta session as its own bounded session trace instead of importing all historical MemFS state
+- confirm that MemOps captures one real Letta session as its own bounded session trace instead of importing all historical MemFS state
 
 Commands:
 
 ```bash
-doctor agents
-doctor capture --agent <agent-id>
+memops agents
+memops capture --agent <agent-id>
 # run a real Letta session here that changes memory
-doctor captures
-doctor --db .memfs_doctor/session.db finish --capture-id <capture-id>
-doctor --db .memfs_doctor/session.db runs
-doctor --db .memfs_doctor/session.db session --session <session-id>
-doctor --db .memfs_doctor/session.db timeline --session <session-id>
+memops captures
+memops --db .memfs_doctor/session.db finish --capture-id <capture-id>
+memops --db .memfs_doctor/session.db runs
+memops --db .memfs_doctor/session.db session --session <session-id>
+memops --db .memfs_doctor/session.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -387,14 +387,14 @@ Goal:
 Commands:
 
 ```bash
-doctor capture --agent <agent-id>
+memops capture --agent <agent-id>
 # run a real Letta session here that causes at least one recall and one miss
-doctor --db .memfs_doctor/session.db finish \
+memops --db .memfs_doctor/session.db finish \
   --capture-id <capture-id> \
   --runtime-trace <path-to-runtime-trace.jsonl>
-doctor --db .memfs_doctor/session.db session --session <session-id>
-doctor --db .memfs_doctor/session.db stats --session <session-id> --json
-doctor --db .memfs_doctor/session.db timeline --session <session-id>
+memops --db .memfs_doctor/session.db session --session <session-id>
+memops --db .memfs_doctor/session.db stats --session <session-id> --json
+memops --db .memfs_doctor/session.db timeline --session <session-id>
 ```
 
 Suggested runtime trace contents:
@@ -419,15 +419,15 @@ Pass condition:
 ### Manual Test 10: Wrapped Letta Runtime Recorder
 
 Goal:
-- confirm that MemFS Doctor can generate the runtime trace itself while you use terminal Letta normally
+- confirm that MemOps can generate the runtime trace itself while you use terminal Letta normally
 
 Commands:
 
 ```bash
-doctor --db .memfs_doctor/session.db chat -- letta
-doctor --db .memfs_doctor/session.db session --session <session-id>
-doctor --db .memfs_doctor/session.db stats --session <session-id> --json
-doctor --db .memfs_doctor/session.db timeline --session <session-id>
+memops --db .memfs_doctor/session.db chat -- letta
+memops --db .memfs_doctor/session.db session --session <session-id>
+memops --db .memfs_doctor/session.db stats --session <session-id> --json
+memops --db .memfs_doctor/session.db timeline --session <session-id>
 ```
 
 Suggested Letta interaction:
@@ -465,7 +465,7 @@ Suggested Letta flow:
 Commands:
 
 ```bash
-doctor --db .memfs_doctor/session.db health \
+memops --db .memfs_doctor/session.db health \
   --session <session-id> \
   --json
 ```
@@ -492,7 +492,7 @@ Suggested setup:
 Commands:
 
 ```bash
-doctor --db .memfs_doctor/session.db compare \
+memops --db .memfs_doctor/session.db compare \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --json
@@ -519,11 +519,11 @@ Suggested setup:
 Commands:
 
 ```bash
-doctor --db .memfs_doctor/session.db retrieval \
+memops --db .memfs_doctor/session.db retrieval \
   --session <session-id> \
   --json
 
-doctor --db .memfs_doctor/session.db retrieval \
+memops --db .memfs_doctor/session.db retrieval \
   --session <session-id> \
   --step <retrieval-step>
 ```
@@ -553,21 +553,21 @@ Suggested setup:
 Commands:
 
 ```bash
-doctor timeline \
+memops timeline \
   --session <session-id>
 
-doctor step \
+memops step \
   --session <session-id> \
   --step <step-number> \
   --json
 
-doctor diff \
+memops diff \
   --session <session-id> \
   --before-step <earlier-step> \
   --after-step <later-step> \
   --json
 
-doctor timeline \
+memops timeline \
   --trace-path examples/letta_session.jsonl \
   --json
 ```
@@ -596,22 +596,22 @@ Suggested setup:
 Commands:
 
 ```bash
-doctor --db /tmp/memfs-doctor-phase6.db init-db
+memops --db /tmp/memops-phase6.db init-db
 
-doctor --db /tmp/memfs-doctor-phase6.db ingest \
+memops --db /tmp/memops-phase6.db ingest \
   examples/letta_session.jsonl \
   --framework letta
 
-doctor --db /tmp/memfs-doctor-phase6.db gate \
+memops --db /tmp/memops-phase6.db gate \
   --session session-001 \
   --json
 
-doctor --db /tmp/memfs-doctor-phase6.db health \
+memops --db /tmp/memops-phase6.db health \
   --session session-001 \
   --thresholds examples/phase6_thresholds.json \
   --json
 
-doctor --db .memfs_doctor/session.db regress \
+memops --db .memfs_doctor/session.db regress \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --regression-thresholds examples/phase6_thresholds.json \
@@ -636,11 +636,11 @@ Goal:
 Commands:
 
 ```bash
-doctor --db /tmp/memfs-doctor-dashboard.db capture --agent <agent-id>
+memops --db /tmp/memops-dashboard.db capture --agent <agent-id>
 
-doctor --db /tmp/memfs-doctor-dashboard.db dash
+memops --db /tmp/memops-dashboard.db dash
 
-doctor --db /tmp/memfs-doctor-dashboard.db chat -- letta
+memops --db /tmp/memops-dashboard.db chat -- letta
 ```
 
 Manual validation:
@@ -663,11 +663,11 @@ Goal:
 Commands:
 
 ```bash
-doctor --db .memfs_doctor/session.db dash
+memops --db .memfs_doctor/session.db dash
 
-doctor --db .memfs_doctor/session.db capture --agent <agent-id>
+memops --db .memfs_doctor/session.db capture --agent <agent-id>
 
-doctor --db .memfs_doctor/session.db chat -- letta
+memops --db .memfs_doctor/session.db chat -- letta
 ```
 
 Manual validation:
@@ -695,7 +695,7 @@ Trace source:
 Observed Letta behavior:
 - ...
 
-Observed MemFS Doctor output:
+Observed MemOps output:
 - ...
 
 Pass/Fail:
