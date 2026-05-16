@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from memfs_doctor.core.events import MemoryEvent, SessionRecord
 
 
-DEFAULT_DB_PATH = Path(".memfs_doctor") / "memfs_doctor.db"
+DEFAULT_DB_PATH = Path(".memfs_doctor") / "session.db"
 
 
 class SQLiteEventStore:
@@ -47,6 +48,36 @@ class SQLiteEventStore:
                 """
                 CREATE INDEX IF NOT EXISTS idx_events_session_timestamp
                 ON events (session_id, timestamp, id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS health_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    capture_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    framework TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    turn_index INTEGER NOT NULL,
+                    query TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    metrics_json TEXT NOT NULL,
+                    findings_json TEXT NOT NULL,
+                    UNIQUE(capture_id, turn_index)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_health_snapshots_session_turn
+                ON health_snapshots (session_id, turn_index)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_health_snapshots_capture_turn
+                ON health_snapshots (capture_id, turn_index)
                 """
             )
 
@@ -159,3 +190,136 @@ class SQLiteEventStore:
                 )
             )
         return events
+
+    def upsert_health_snapshot(
+        self,
+        *,
+        capture_id: str,
+        session_id: str,
+        framework: str,
+        agent_id: str,
+        turn_index: int,
+        query: str,
+        status: str,
+        updated_at: str,
+        metrics: dict[str, Any],
+        findings: list[dict[str, Any]],
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO health_snapshots (
+                    capture_id, session_id, framework, agent_id, turn_index,
+                    query, status, updated_at, metrics_json, findings_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(capture_id, turn_index) DO UPDATE SET
+                    query = excluded.query,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at,
+                    metrics_json = excluded.metrics_json,
+                    findings_json = excluded.findings_json
+                """,
+                (
+                    capture_id,
+                    session_id,
+                    framework,
+                    agent_id,
+                    turn_index,
+                    query,
+                    status,
+                    updated_at,
+                    json.dumps(metrics, sort_keys=True),
+                    json.dumps(findings, sort_keys=True),
+                ),
+            )
+
+    def list_health_snapshots(self, session_id: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    capture_id, session_id, framework, agent_id, turn_index, query,
+                    status, updated_at, metrics_json, findings_json
+                FROM health_snapshots
+                WHERE session_id = ? OR capture_id = ?
+                ORDER BY turn_index ASC, id ASC
+                """,
+                (session_id, session_id),
+            ).fetchall()
+        return [
+            {
+                "capture_id": row[0],
+                "session_id": row[1],
+                "framework": row[2],
+                "agent_id": row[3],
+                "turn_index": row[4],
+                "query": row[5],
+                "status": row[6],
+                "updated_at": row[7],
+                "metrics": json.loads(row[8]),
+                "findings": json.loads(row[9]),
+            }
+            for row in rows
+        ]
+
+    def list_snapshot_sessions(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                WITH ranked AS (
+                    SELECT
+                        capture_id,
+                        session_id,
+                        framework,
+                        agent_id,
+                        turn_index,
+                        query,
+                        status,
+                        updated_at,
+                        ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY turn_index DESC, id DESC) AS rn
+                    FROM health_snapshots
+                )
+                SELECT
+                    capture_id, session_id, framework, agent_id, turn_index, query, status, updated_at
+                FROM ranked
+                WHERE rn = 1
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "capture_id": row[0],
+                "session_id": row[1],
+                "framework": row[2],
+                "agent_id": row[3],
+                "turn_index": row[4],
+                "query": row[5],
+                "status": row[6],
+                "updated_at": row[7],
+            }
+            for row in rows
+        ]
+
+    def count_health_snapshots(self, session_id: str) -> int:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM health_snapshots
+                WHERE session_id = ? OR capture_id = ?
+                """,
+                (session_id, session_id),
+            ).fetchone()
+        return int(row[0] if row else 0)
+
+    def total_health_snapshot_count(self) -> int:
+        with self.connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM health_snapshots").fetchone()
+        return int(row[0] if row else 0)
+
+    def total_event_count(self) -> int:
+        with self.connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM events").fetchone()
+        return int(row[0] if row else 0)

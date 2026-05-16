@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/CLI-First-1F2937" alt="CLI First">
   <img src="https://img.shields.io/badge/SQLite-Trace%20Store-003B57?logo=sqlite&logoColor=white" alt="SQLite Trace Store">
   <img src="https://img.shields.io/badge/Letta-Adapter%20First-0F766E" alt="Letta Adapter First">
-  <img src="https://img.shields.io/badge/Status-Phase%206%20Implemented-15803D" alt="Status Phase 6 Implemented">
+  <img src="https://img.shields.io/badge/Status-Phase%207%20Implemented-15803D" alt="Status Phase 7 Implemented">
 </p>
 
 <p align="center">
@@ -93,6 +93,8 @@ These metrics are designed to run on stored traces, not only live sessions. That
 - offline replay from stored trace files without the SQLite store
 - CI-oriented health and regression checks with non-zero exit codes
 - JSON export suitable for downstream automation
+- local React dashboard backed by the same SQLite event store
+- per-turn health snapshots persisted during wrapped Letta sessions
 
 ## Who This Is For
 
@@ -153,14 +155,14 @@ MemFS Doctor can capture real Letta sessions into the local event store.
 PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
 # run a real Letta conversation here
 PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture --capture-id <capture-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db sessions
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture --capture-id <capture-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db sessions
 ```
 
 If you already have a runtime JSONL trace with retrieval and miss events, merge it into the bounded session:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture \
   --capture-id <capture-id> \
   --runtime-trace <path-to-runtime-trace.jsonl>
 ```
@@ -171,7 +173,7 @@ MemFS Doctor can also generate the runtime trace for a terminal Letta session au
 
 ```bash
 PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db record-letta-runtime \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db record-letta-runtime \
   --capture-id <capture-id> \
   --auto-finish \
   -- letta
@@ -183,14 +185,37 @@ This wrapper:
 - records transcript lines
 - infers retrieval and retrieval-miss events from the conversation flow
 - writes a runtime JSONL trace under `.memfs_doctor/runtime/`
+- persists per-turn health snapshots into SQLite while the session is still running
 - can auto-finish the bounded session into SQLite
+
+## Dashboard
+
+Start the local dashboard against the same database used for captures:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db dashboard
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765
+```
+
+The dashboard is a React-based local UI that reads the same stored data produced by the CLI:
+
+- session list with live health state
+- per-turn health snapshots while Letta is still running
+- trend charts for churn, latency, duplicates, and contradictions
+- issue summary panels from the stored health report
+- replay and retrieval entry points after the session is ingested
 
 ## Health Reports And Regression Comparison
 
 Generate a per-session health report:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db report \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db report \
   --session <session-id> \
   --json
 ```
@@ -198,7 +223,7 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.d
 Compare a candidate run against a baseline:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db compare-sessions \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db compare-sessions \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --json
@@ -209,7 +234,7 @@ This is the core evaluation loop for the product. A healthy baseline and a stres
 Inspect retrieval causality and recall quality for a stored session:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
   --session <session-id> \
   --json
 ```
@@ -217,7 +242,7 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.d
 Inspect a single retrieval step:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
   --session <session-id> \
   --step <retrieval-step>
 ```
@@ -244,6 +269,7 @@ The project has completed the first reporting-oriented milestone needed to make 
 - Phase 4: retrieval explainability and causal recall inspection
 - Phase 5: replay engine, step inspection, and offline snapshot diffing
 - Phase 6: alerts, regression checks, and CI hooks
+- Phase 7: local dashboard foundation for memory observability
 
 For details, see:
 

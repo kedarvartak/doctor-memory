@@ -319,10 +319,10 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
 PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
 # run a real Letta session here that changes memory
 PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture --capture-id <capture-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db sessions
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect --session <session-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db replay --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture --capture-id <capture-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db sessions
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db replay --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -352,12 +352,12 @@ Commands:
 ```bash
 PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
 # run a real Letta session here that causes at least one recall and one miss
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db finish-letta-capture \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture \
   --capture-id <capture-id> \
   --runtime-trace <path-to-runtime-trace.jsonl>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect --session <session-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db replay --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db replay --session <session-id>
 ```
 
 Suggested runtime trace contents:
@@ -388,13 +388,13 @@ Commands:
 
 ```bash
 PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db record-letta-runtime \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db record-letta-runtime \
   --capture-id <capture-id> \
   --auto-finish \
   -- letta
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect --session <session-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db metrics --session <session-id> --json
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db replay --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect --session <session-id>
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db metrics --session <session-id> --json
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db replay --session <session-id>
 ```
 
 Suggested Letta interaction:
@@ -432,7 +432,7 @@ Suggested Letta flow:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db report \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db report \
   --session <session-id> \
   --json
 ```
@@ -459,7 +459,7 @@ Suggested setup:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db compare-sessions \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db compare-sessions \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --json
@@ -486,11 +486,11 @@ Suggested setup:
 Commands:
 
 ```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
   --session <session-id> \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db inspect-retrieval \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
   --session <session-id> \
   --step <retrieval-step>
 ```
@@ -578,7 +578,7 @@ PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db
   --thresholds examples/phase6_thresholds.json \
   --json
 
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db check-regression \
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db check-regression \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --regression-thresholds examples/phase6_thresholds.json \
@@ -593,6 +593,35 @@ Expected result:
 
 Pass condition:
 - a CI job can fail deterministically from session health or regression findings without custom wrapper logic
+
+## Manual Test 16: Dashboard Foundation
+
+Goal:
+- verify that the local dashboard consumes the same stored data as the CLI
+- verify that wrapped Letta sessions emit per-turn health snapshots into the dashboard while the session is still running
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-dashboard.db start-letta-capture --agent <agent-id>
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-dashboard.db dashboard
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-dashboard.db record-letta-runtime \
+  --auto-finish \
+  -- letta
+```
+
+Manual validation:
+- open `http://127.0.0.1:8765`
+- confirm the current session appears in the left session list
+- send multiple Letta prompts that create writes and at least one retrieval
+- confirm the per-turn health table grows while the session is still running
+- confirm the trend charts move as turns accumulate
+- after the session exits, confirm replay and stored report data are visible for the same session
+
+Pass condition:
+- dashboard views consume the same underlying session data produced by the CLI capture and reporting workflow
 
 ## Manual Test Notes Template
 

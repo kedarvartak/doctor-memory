@@ -9,6 +9,7 @@ from memfs_doctor.adapters.letta import LettaTraceAdapter
 from memfs_doctor.core.metrics import compute_metrics
 from memfs_doctor.core.replay import diff_steps, inspect_step, replay_session
 from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
+from memfs_doctor.dashboard.server import create_dashboard_server
 from memfs_doctor.core.reporting import (
     HealthReport,
     check_health_report,
@@ -30,9 +31,15 @@ from memfs_doctor.reports.render import (
     render_sessions,
 )
 from memfs_doctor.runtime.letta_runtime import (
+    LIVE_DEBUG_LOG_ENV,
+    RecordedLine,
     default_runtime_trace_path,
     default_structured_trace_path,
     default_transcript_path,
+    infer_runtime_events_from_turns,
+    load_structured_runtime_events,
+    merge_runtime_events,
+    parse_transcript_turns,
     record_runtime_trace,
 )
 from memfs_doctor.storage.sqlite import SQLiteEventStore
@@ -50,6 +57,13 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework.")
 
     subparsers.add_parser("sessions", help="List captured sessions.")
+    snapshots_cmd = subparsers.add_parser("health-snapshots", help="List per-turn health snapshots for a session or capture.")
+    snapshots_cmd.add_argument("--session", required=True, help="Session or capture identifier.")
+    snapshots_cmd.add_argument("--json", action="store_true")
+
+    dashboard_cmd = subparsers.add_parser("dashboard", help="Serve the local memory observability dashboard.")
+    dashboard_cmd.add_argument("--host", default="127.0.0.1")
+    dashboard_cmd.add_argument("--port", default=8765, type=int)
 
     subparsers.add_parser("letta-agents", help="List local Letta agents discovered under ~/.letta/agents.")
 
@@ -237,6 +251,38 @@ def cmd_sessions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_health_snapshots(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    snapshots = store.list_health_snapshots(args.session)
+    if args.json:
+        print(json.dumps({"snapshots": snapshots}, indent=2, sort_keys=True))
+        return 0
+    if not snapshots:
+        print("No health snapshots found.")
+        return 0
+    for item in snapshots:
+        print(
+            f"turn={item['turn_index']} status={item['status']} query={item['query']!r} "
+            f"updated_at={item['updated_at']}"
+        )
+    return 0
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    store.init_db()
+    server = create_dashboard_server(args.host, args.port, store=store)
+    print(f"MemFS Doctor dashboard listening on http://{args.host}:{args.port}")
+    print(f"Dashboard database: {store.db_path}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down dashboard.")
+    finally:
+        server.server_close()
+    return 0
+
+
 def cmd_letta_agents(args: argparse.Namespace) -> int:
     del args
     adapter = LettaTraceAdapter()
@@ -294,6 +340,40 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         else default_structured_trace_path(Path.cwd(), capture.capture_id)
     )
     transcript_path = default_transcript_path(Path.cwd(), capture.capture_id)
+    debug_log_path = Path.cwd() / ".memfs_doctor" / "dashboard" / f"{capture.capture_id}.live-errors.log"
+    store = _store_from_args(args)
+    store.init_db()
+
+    def handle_turn(*, turn, turns, lines) -> None:
+        del lines
+        heuristic_events = infer_runtime_events_from_turns(
+            turns,
+            agent_id=capture.agent_id,
+            session_id=capture.capture_id,
+        )
+        structured_events = load_structured_runtime_events(
+            structured_trace_path,
+            agent_id=capture.agent_id,
+            session_id=capture.capture_id,
+        )
+        runtime_events = merge_runtime_events(heuristic_events, structured_events)
+        preview_events = adapter.preview_session_capture(
+            capture.capture_id,
+            runtime_events=runtime_events,
+        )
+        report = _health_report_from_events(preview_events)
+        store.upsert_health_snapshot(
+            capture_id=capture.capture_id,
+            session_id=capture.capture_id,
+            framework=report.framework,
+            agent_id=report.agent_id,
+            turn_index=len(turns),
+            query=turn.query,
+            status=report.status,
+            updated_at=turn.response_timestamp or turn.query_timestamp,
+            metrics=report.metrics,
+            findings=[item.to_dict() for item in report.findings],
+        )
 
     exit_code, trace_path, raw_transcript_path, events = record_runtime_trace(
         agent_id=capture.agent_id,
@@ -302,16 +382,32 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         output_path=output_path,
         transcript_path=transcript_path,
         structured_trace_path=structured_trace_path,
+        on_turn=handle_turn,
+        env_extra={LIVE_DEBUG_LOG_ENV: str(debug_log_path)},
+        debug_log_path=str(debug_log_path),
     )
+
+    _backfill_health_snapshots(
+        store=store,
+        adapter=adapter,
+        capture=capture,
+        transcript_path=raw_transcript_path,
+        structured_trace_path=structured_trace_path,
+    )
+    snapshot_count = store.count_health_snapshots(capture.capture_id)
+    reopened_snapshot_count = SQLiteEventStore(store.db_path).count_health_snapshots(capture.capture_id)
     print(f"\nWrote raw transcript to {raw_transcript_path}")
     print(f"Wrote runtime trace to {trace_path} with {len(events)} inferred events.")
+    print(f"Using database {store.db_path}")
+    print(f"Persisted {snapshot_count} health snapshots for {capture.capture_id}")
+    print(f"Reopened database sees {reopened_snapshot_count} health snapshots for {capture.capture_id}")
 
     if args.auto_finish:
-        store = _store_from_args(args)
-        store.init_db()
         merged_events = adapter.finish_session_capture(capture.capture_id, runtime_trace_path=trace_path)
         ingested = store.ingest_events(merged_events)
         print(f"Ingested {ingested} events from Letta session capture {capture.capture_id}")
+        post_finish_snapshot_count = SQLiteEventStore(store.db_path).count_health_snapshots(capture.capture_id)
+        print(f"Post-finish database sees {post_finish_snapshot_count} health snapshots for {capture.capture_id}")
 
     return exit_code
 
@@ -416,6 +512,62 @@ def _health_report_from_events(events, *, threshold_path: str | None = None) -> 
     findings = evaluate_thresholds(metrics, load_threshold_rules(threshold_path))
     retrievals = analyze_retrievals(events)
     return HealthReport.from_metrics(metrics, findings, problematic_recalls=top_problematic_recalls(retrievals.traces))
+
+
+def _load_recorded_lines(path: str | Path) -> list[RecordedLine]:
+    lines: list[RecordedLine] = []
+    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+        if "\t" not in raw:
+            continue
+        timestamp, text = raw.split("\t", 1)
+        lines.append(RecordedLine(timestamp=timestamp, text=text))
+    return lines
+
+
+def _backfill_health_snapshots(
+    *,
+    store: SQLiteEventStore,
+    adapter: LettaTraceAdapter,
+    capture,
+    transcript_path: str | Path,
+    structured_trace_path: str | Path,
+) -> None:
+    existing = store.list_health_snapshots(capture.capture_id)
+    existing_turns = {item["turn_index"] for item in existing}
+    turns = parse_transcript_turns(_load_recorded_lines(transcript_path))
+    structured_events = load_structured_runtime_events(
+        structured_trace_path,
+        agent_id=capture.agent_id,
+        session_id=capture.capture_id,
+    )
+    for index in range(1, len(turns) + 1):
+        if index in existing_turns:
+            continue
+        partial_turns = turns[:index]
+        heuristic_events = infer_runtime_events_from_turns(
+            partial_turns,
+            agent_id=capture.agent_id,
+            session_id=capture.capture_id,
+        )
+        runtime_events = merge_runtime_events(heuristic_events, structured_events)
+        preview_events = adapter.preview_session_capture(
+            capture.capture_id,
+            runtime_events=runtime_events,
+        )
+        report = _health_report_from_events(preview_events)
+        turn = partial_turns[-1]
+        store.upsert_health_snapshot(
+            capture_id=capture.capture_id,
+            session_id=capture.capture_id,
+            framework=report.framework,
+            agent_id=report.agent_id,
+            turn_index=index,
+            query=turn.query,
+            status=report.status,
+            updated_at=turn.response_timestamp or turn.query_timestamp,
+            metrics=report.metrics,
+            findings=[item.to_dict() for item in report.findings],
+        )
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -543,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
         "init-db": cmd_init_db,
         "ingest": cmd_ingest,
         "sessions": cmd_sessions,
+        "health-snapshots": cmd_health_snapshots,
+        "dashboard": cmd_dashboard,
         "letta-agents": cmd_letta_agents,
         "letta-captures": cmd_letta_captures,
         "start-letta-capture": cmd_start_letta_capture,

@@ -257,3 +257,24 @@ Reason:
 Next:
 - Add richer policy controls for “session-local drift” versus “systemic memory corruption” classifications.
 - Consider machine-readable trend history across many runs, not only pairwise comparisons.
+
+## 2026-05-16 | v0.6.0-phase7-dashboard-foundation
+
+Type: feature
+Summary: Added the first local dashboard layer with per-turn health snapshots, a lightweight HTTP service, and a React-based observability UI.
+
+Changes:
+- Extended `memfs_doctor.storage.sqlite` with a `health_snapshots` table for per-turn session health history.
+- Updated `record-letta-runtime` to persist live health snapshots into SQLite while wrapped Letta chats are still running.
+- Added `memfs_doctor.dashboard.service` and `memfs_doctor.dashboard.server` to expose dashboard-ready JSON views over sessions, reports, replay, and retrieval data.
+- Added a new `dashboard` CLI command that serves a local web UI.
+- Added a React-based dashboard frontend with session list, metric trend charts, issue panels, replay entry points, and per-turn health tables.
+- Added automated tests for snapshot storage and dashboard data composition.
+
+Reason:
+- Phase 7 requires a visual presentation layer over the already-solid capture, storage, reporting, and replay primitives.
+- Developers needed a local UI that updates as Letta sessions progress, without turning the project into a frontend-first rewrite.
+
+Next:
+- Add richer dashboard drill-downs for replay step inspection and retrieval causality.
+- Consider optional Prometheus or Grafana export once the local product UI is stable.
