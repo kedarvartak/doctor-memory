@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import sys
 
 from memfs_doctor.adapters.letta import LettaTraceAdapter
@@ -30,9 +31,13 @@ from memfs_doctor.reports.render import (
     render_sessions,
 )
 from memfs_doctor.runtime.letta_runtime import (
+    default_live_status_path,
     default_runtime_trace_path,
     default_structured_trace_path,
     default_transcript_path,
+    infer_runtime_events_from_turns,
+    load_structured_runtime_events,
+    merge_runtime_events,
     record_runtime_trace,
 )
 from memfs_doctor.storage.sqlite import SQLiteEventStore
@@ -77,6 +82,14 @@ def build_parser() -> argparse.ArgumentParser:
     record_letta_runtime.add_argument(
         "--structured-trace-path",
         help="Optional structured retrieval sidecar path. Defaults to .memfs_doctor/runtime/<capture-id>.structured.jsonl",
+    )
+    record_letta_runtime.add_argument(
+        "--thresholds",
+        help="Optional JSON threshold config path for live health status during recording.",
+    )
+    record_letta_runtime.add_argument(
+        "--live-status-path",
+        help="Optional output path for the live status JSON. Defaults to .memfs_doctor/live-status/<capture-id>.json",
     )
     record_letta_runtime.add_argument(
         "--auto-finish",
@@ -293,7 +306,36 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         if args.structured_trace_path
         else default_structured_trace_path(Path.cwd(), capture.capture_id)
     )
+    live_status_path = (
+        Path(args.live_status_path)
+        if args.live_status_path
+        else default_live_status_path(Path.cwd(), capture.capture_id)
+    )
     transcript_path = default_transcript_path(Path.cwd(), capture.capture_id)
+
+    def handle_turn(*, turn, turns, lines) -> None:
+        del lines
+        heuristic_events = infer_runtime_events_from_turns(turns, agent_id=capture.agent_id, session_id=capture.capture_id)
+        structured_events = load_structured_runtime_events(
+            structured_trace_path,
+            agent_id=capture.agent_id,
+            session_id=capture.capture_id,
+        )
+        runtime_events = merge_runtime_events(heuristic_events, structured_events)
+        preview_events = adapter.preview_session_capture(
+            capture.capture_id,
+            runtime_events=runtime_events,
+        )
+        report = _health_report_from_events(preview_events, threshold_path=args.thresholds)
+        payload = _live_status_payload(
+            report,
+            capture_id=capture.capture_id,
+            turn_query=turn.query,
+            completed_turns=len(turns),
+        )
+        export_report(live_status_path, payload)
+        _draw_live_status_badge(_render_live_status_badge(report))
+
     exit_code, trace_path, raw_transcript_path, events = record_runtime_trace(
         agent_id=capture.agent_id,
         session_id=capture.capture_id,
@@ -301,6 +343,7 @@ def cmd_record_letta_runtime(args: argparse.Namespace) -> int:
         output_path=output_path,
         transcript_path=transcript_path,
         structured_trace_path=structured_trace_path,
+        on_turn=handle_turn,
     )
     print(f"\nWrote raw transcript to {raw_transcript_path}")
     print(f"Wrote runtime trace to {trace_path} with {len(events)} inferred events.")
@@ -408,6 +451,55 @@ def _health_report_for_session(
     findings = evaluate_thresholds(metrics, load_threshold_rules(threshold_path))
     retrievals = analyze_retrievals(events)
     return HealthReport.from_metrics(metrics, findings, problematic_recalls=top_problematic_recalls(retrievals.traces))
+
+
+def _health_report_from_events(events, *, threshold_path: str | None = None) -> HealthReport:
+    metrics = compute_metrics(events)
+    findings = evaluate_thresholds(metrics, load_threshold_rules(threshold_path))
+    retrievals = analyze_retrievals(events)
+    return HealthReport.from_metrics(metrics, findings, problematic_recalls=top_problematic_recalls(retrievals.traces))
+
+
+def _live_status_label(report: HealthReport) -> str:
+    if report.status == "healthy":
+        return "PASS"
+    if report.status == "warning":
+        return "WARN"
+    return "FAIL"
+
+
+def _render_live_status_badge(report: HealthReport) -> str:
+    label = _live_status_label(report)
+    if label == "PASS":
+        return "\x1b[30;42;1m PASS \x1b[0m"
+    if label == "WARN":
+        return "\x1b[30;43;1m WARN \x1b[0m"
+    return "\x1b[37;41;1m FAIL \x1b[0m"
+
+
+def _draw_live_status_badge(badge_text: str) -> None:
+    columns, _ = shutil.get_terminal_size(fallback=(120, 40))
+    width = 6
+    column = max(columns - width + 1, 1)
+    sys.stdout.write(f"\x1b7\x1b[2;{column}H{badge_text}\x1b8")
+    sys.stdout.flush()
+
+
+def _live_status_payload(
+    report: HealthReport,
+    *,
+    capture_id: str,
+    turn_query: str,
+    completed_turns: int,
+) -> dict[str, object]:
+    return {
+        "capture_id": capture_id,
+        "updated_turn_query": turn_query,
+        "completed_turns": completed_turns,
+        "status": report.status,
+        "summary": _live_status_label(report),
+        "report": report.to_dict(),
+    }
 
 
 def cmd_report(args: argparse.Namespace) -> int:

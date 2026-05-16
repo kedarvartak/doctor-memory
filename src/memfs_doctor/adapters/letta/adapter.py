@@ -135,6 +135,48 @@ class LettaTraceAdapter(BaseAdapter):
         self.state.delete_capture(capture_id)
         return events
 
+    def preview_session_capture(
+        self,
+        capture_id: str,
+        *,
+        runtime_trace_path: str | Path | None = None,
+        runtime_events: list[MemoryEvent] | None = None,
+    ) -> list[MemoryEvent]:
+        capture = self.state.load_capture(capture_id)
+        repo = capture.memory_dir
+        if not repo.exists():
+            raise AdapterError(f"Captured memory directory no longer exists: {repo}")
+
+        previewed_at = utc_now_iso()
+        events = self._build_git_events(
+            repo=repo,
+            agent_id=capture.agent_id,
+            session_id=capture.capture_id,
+            since_head=capture.base_head,
+            started_at=capture.started_at,
+            ended_at=previewed_at,
+            metadata={
+                "capture_id": capture.capture_id,
+                "conversation_id": capture.conversation_id,
+                "capture_mode": "incremental-preview",
+            },
+        )
+        if events and events[-1].kind == EventKind.SESSION_ENDED:
+            events = events[:-1]
+        merged_runtime_events = list(runtime_events or [])
+        if runtime_trace_path is not None:
+            merged_runtime_events.extend(
+                self._load_runtime_trace_for_capture(
+                    path=runtime_trace_path,
+                    capture=capture,
+                    ended_at=previewed_at,
+                )
+            )
+        if merged_runtime_events:
+            events.extend(merged_runtime_events)
+            events = sorted(events, key=lambda event: (event.timestamp, event.event_id))
+        return events
+
     def list_captures(self) -> list["LettaCapture"]:
         return self.state.list_captures(prune_missing=True)
 

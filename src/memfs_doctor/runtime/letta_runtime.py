@@ -108,6 +108,10 @@ def default_structured_trace_path(workspace_root: Path, capture_id: str) -> Path
     return workspace_root / ".memfs_doctor" / "runtime" / f"{capture_id}.structured.jsonl"
 
 
+def default_live_status_path(workspace_root: Path, capture_id: str) -> Path:
+    return workspace_root / ".memfs_doctor" / "live-status" / f"{capture_id}.json"
+
+
 def sanitize_terminal_line(text: str) -> str:
     cleaned = ANSI_RE.sub("", text).replace("\r", "").strip("\n")
     return CONTROL_RE.sub("", cleaned)
@@ -296,13 +300,22 @@ class InteractiveRuntimeRecorder:
         self._buffer = ""
         self._stdin_buffer = ""
         self.lines: list[RecordedLine] = []
+        self._reported_turn_states: dict[tuple[str, str], tuple[int, int]] = {}
+        self._on_turn: Any | None = None
 
-    def run(self, command: list[str], env: dict[str, str] | None = None) -> tuple[int, list[RecordedLine]]:
+    def run(
+        self,
+        command: list[str],
+        env: dict[str, str] | None = None,
+        *,
+        on_turn: Any | None = None,
+    ) -> tuple[int, list[RecordedLine]]:
         if not command:
             raise ValueError("Command is required.")
         executable = command[0]
         if not shutil.which(executable) and not Path(executable).exists():
             raise FileNotFoundError(f"Command not found: {executable}")
+        self._on_turn = on_turn
         return self._run_with_pty(command, env=env)
 
     def _run_with_pty(self, command: list[str], env: dict[str, str] | None = None) -> tuple[int, list[RecordedLine]]:
@@ -390,11 +403,13 @@ class InteractiveRuntimeRecorder:
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
             self.lines.append(RecordedLine(timestamp=utc_now_iso(), text=line))
+            self._emit_completed_turns()
 
     def _flush_buffer(self) -> None:
         remainder = self._buffer.strip("\n")
         if remainder:
             self.lines.append(RecordedLine(timestamp=utc_now_iso(), text=remainder))
+            self._emit_completed_turns()
         self._buffer = ""
 
     def _record_stdin_bytes(self, data: bytes) -> None:
@@ -410,6 +425,27 @@ class InteractiveRuntimeRecorder:
                 continue
             if 32 <= byte <= 126:
                 self._stdin_buffer += chr(byte)
+
+    def _emit_completed_turns(self) -> None:
+        if self._on_turn is None:
+            return
+        turns = parse_transcript_turns(self.lines)
+        for turn in turns:
+            if not (turn.response_lines or turn.memory_lines):
+                continue
+            key = (turn.query_timestamp, turn.query)
+            state = (
+                len(normalize_response_lines(turn.response_lines)),
+                len(normalize_memory_lines(turn.memory_lines)),
+            )
+            previous_state = self._reported_turn_states.get(key)
+            if previous_state == state:
+                continue
+            self._reported_turn_states[key] = state
+            try:
+                self._on_turn(turn=turn, turns=list(turns), lines=list(self.lines))
+            except Exception as exc:
+                print(f"\n[memfs-doctor:LIVE-STATUS-ERROR] {exc}", file=sys.stderr)
 
 
 def write_raw_transcript(path: str | Path, lines: list[RecordedLine]) -> Path:
@@ -473,6 +509,7 @@ def record_runtime_trace(
     output_path: str | Path,
     transcript_path: str | Path,
     structured_trace_path: str | Path | None = None,
+    on_turn: Any | None = None,
 ) -> tuple[int, Path, Path, list[MemoryEvent]]:
     recorder = InteractiveRuntimeRecorder()
     structured_path = Path(structured_trace_path) if structured_trace_path else default_structured_trace_path(Path.cwd(), session_id)
@@ -484,6 +521,7 @@ def record_runtime_trace(
             AGENT_ID_ENV: agent_id,
             SESSION_ID_ENV: session_id,
         },
+        on_turn=on_turn,
     )
     turns = parse_transcript_turns(lines)
     heuristic_events = infer_runtime_events_from_turns(turns, agent_id=agent_id, session_id=session_id)

@@ -13,6 +13,7 @@ from memfs_doctor.runtime.letta_runtime import (
     SESSION_ID_ENV,
     STRUCTURED_TRACE_PATH_ENV,
     RecordedLine,
+    default_live_status_path,
     default_runtime_trace_path,
     default_structured_trace_path,
     default_transcript_path,
@@ -72,6 +73,10 @@ class RuntimeTraceTests(unittest.TestCase):
             self.assertEqual(payloads[0]["kind"], "memory_retrieved")
             self.assertEqual(payloads[0]["session_id"], "session-001")
 
+    def test_default_live_status_path_uses_live_status_directory(self) -> None:
+        path = default_live_status_path(Path("/tmp/workspace"), "session-001")
+        self.assertEqual(path, Path("/tmp/workspace/.memfs_doctor/live-status/session-001.json"))
+
     def test_stdin_recording_emits_query_lines(self) -> None:
         recorder = InteractiveRuntimeRecorder()
         recorder._record_stdin_bytes(b"What is my favorite tea?")
@@ -83,6 +88,22 @@ class RuntimeTraceTests(unittest.TestCase):
         self.assertEqual(len(texts), 2)
         self.assertEqual(texts[0], "> What is my favorite tea?")
         self.assertEqual(texts[1], "> What is my favorite dessert?")
+
+    def test_completed_turn_callback_fires_once_per_completed_turn(self) -> None:
+        seen_queries: list[str] = []
+        recorder = InteractiveRuntimeRecorder()
+        recorder._on_turn = lambda **payload: seen_queries.append(payload["turn"].query)
+
+        recorder._record_stdin_bytes(b"What is my favorite tea?")
+        recorder._record_stdin_bytes(b"\n")
+        recorder._record_bytes(b"* Thinking...\n")
+        recorder._record_bytes(b"\xe2\x80\xa2 Masala chai.\n")
+        recorder._record_bytes(b"\xe2\x80\xa2 Letta Code is reasoning\xe2\x80\xa6 (esc to interrupt)\n")
+        recorder._record_stdin_bytes(b"What is my favorite dessert?")
+        recorder._record_stdin_bytes(b"\n")
+        recorder._record_bytes(b"\xe2\x80\xa2 I don't know that one yet.\n")
+
+        self.assertEqual(seen_queries, ["What is my favorite tea?", "What is my favorite dessert?"])
 
     def test_raw_transcript_writer_outputs_lines(self) -> None:
         lines = [
