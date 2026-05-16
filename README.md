@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/CLI-First-1F2937" alt="CLI First">
   <img src="https://img.shields.io/badge/SQLite-Trace%20Store-003B57?logo=sqlite&logoColor=white" alt="SQLite Trace Store">
   <img src="https://img.shields.io/badge/Letta-Adapter%20First-0F766E" alt="Letta Adapter First">
-  <img src="https://img.shields.io/badge/Status-Phase%207%20Implemented-15803D" alt="Status Phase 7 Implemented">
+  <img src="https://img.shields.io/badge/Status-Phase%208%20Implemented-15803D" alt="Status Phase 8 Implemented">
 </p>
 
 <p align="center">
@@ -202,13 +202,15 @@ Then open:
 http://127.0.0.1:8765
 ```
 
-The dashboard is a React-based local UI that reads the same stored data produced by the CLI:
+The dashboard is a React-based local observability surface that reads the same stored data produced by the CLI:
 
 - session list with live health state
 - per-turn health snapshots while Letta is still running
-- trend charts for churn, latency, duplicates, and contradictions
-- issue summary panels from the stored health report
-- replay and retrieval entry points after the session is ingested
+- health timeline showing degradation state changes across turns
+- operations-style trend charts for churn, latency, duplicates, and contradictions
+- incident feed for threshold breaches, drift onset, and suspect recalls
+- event stream combining health snapshots, replay entries, and retrieval traces
+- root-cause panels for first degradation, duplicate onset, contradiction onset, and noisy recall clues
 
 ## Health Reports And Regression Comparison
 
@@ -270,6 +272,7 @@ The project has completed the first reporting-oriented milestone needed to make 
 - Phase 5: replay engine, step inspection, and offline snapshot diffing
 - Phase 6: alerts, regression checks, and CI hooks
 - Phase 7: local dashboard foundation for memory observability
+- Phase 8: AI agent observability layer for drift, poisoning, and root-cause debugging
 
 For details, see:
 

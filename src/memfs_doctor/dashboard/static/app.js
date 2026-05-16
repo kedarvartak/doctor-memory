@@ -16,6 +16,26 @@ function statusLabel(status) {
   return "FAIL";
 }
 
+function formatMetric(value, digits = 2) {
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number)) return "-";
+  if (Math.abs(number) >= 1000) return number.toFixed(0);
+  return number.toFixed(digits).replace(/\.00$/, "");
+}
+
+function formatTimestamp(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 function Sparkline({ values, stroke }) {
   const points = useMemo(() => {
     if (!values.length) return "";
@@ -36,7 +56,7 @@ function Sparkline({ values, stroke }) {
     { className: "sparkline", viewBox: "0 0 100 100", preserveAspectRatio: "none" },
     h("polyline", {
       fill: "none",
-      stroke: stroke || "#22d98b",
+      stroke: stroke,
       strokeWidth: "3",
       points,
       strokeLinejoin: "round",
@@ -47,34 +67,33 @@ function Sparkline({ values, stroke }) {
 
 function SessionCard({ session, active, onSelect }) {
   return h(
-    "div",
+    "button",
     {
+      type: "button",
       className: `session-card${active ? " active" : ""}`,
       onClick: () => onSelect(session.session_id),
     },
-    h("div", { className: "session-id" }, session.session_id),
+    h("div", { className: "session-card-top" }, [
+      h("div", { key: "id", className: "session-id" }, session.session_id),
+      h("span", { key: "status", className: `pill ${statusClass(session.live_status || "FAIL")}` }, statusLabel(session.live_status || "FAIL")),
+    ]),
     h(
       "div",
       { className: "session-meta" },
-      h("span", { className: `pill ${statusClass(session.live_status || "FAIL")}` }, statusLabel(session.live_status || "FAIL")),
-      h("span", { className: "pill" }, `${session.framework}`),
-      h("span", { className: "pill" }, `events ${session.event_count}`),
-      session.last_turn_index != null ? h("span", { className: "pill" }, `turn ${session.last_turn_index}`) : null
+      h("span", { className: "mini-meta" }, session.framework),
+      h("span", { className: "mini-meta" }, `events ${session.event_count}`),
+      session.last_turn_index != null ? h("span", { className: "mini-meta" }, `turn ${session.last_turn_index}`) : null
     ),
-    h(
-      "div",
-      { className: "tiny", style: { marginTop: "10px" } },
-      session.last_query || session.agent_id
-    )
+    h("div", { className: "session-footer" }, session.last_query || session.agent_id)
   );
 }
 
-function MetricPanel({ title, value, caption }) {
+function StatCard({ title, value, caption, tone }) {
   return h(
     "div",
-    { className: "panel span-3" },
+    { className: `panel stat-card ${tone || ""}`.trim() },
     h("div", { className: "panel-title" }, title),
-    h("div", { className: "big-metric" }, value),
+    h("div", { className: "stat-value" }, value),
     h("div", { className: "metric-caption" }, caption)
   );
 }
@@ -83,9 +102,56 @@ function TrendCard({ title, value, values, color }) {
   return h(
     "div",
     { className: "trend-card" },
-    h("div", { className: "trend-label" }, title),
-    h("div", { className: "trend-value" }, String(value ?? "-")),
+    h("div", { className: "trend-head" }, [
+      h("div", { key: "label", className: "trend-label" }, title),
+      h("div", { key: "value", className: "trend-value" }, formatMetric(value)),
+    ]),
     h(Sparkline, { values, stroke: color })
+  );
+}
+
+function FeedItem({ item }) {
+  return h(
+    "div",
+    { className: `feed-item ${item.severity || ""}`.trim() },
+    h("div", { className: "feed-item-head" }, [
+      h("span", { key: "kind", className: "feed-kind" }, item.kind),
+      item.status ? h("span", { key: "status", className: `pill ${statusClass(item.status)}` }, statusLabel(item.status)) : null,
+      item.timestamp ? h("span", { key: "ts", className: "tiny" }, formatTimestamp(item.timestamp)) : null,
+    ]),
+    h("div", { className: "feed-title" }, item.title),
+    item.body ? h("div", { className: "feed-body" }, item.body) : null
+  );
+}
+
+function RootCauseCard({ title, value, note, tone }) {
+  return h(
+    "div",
+    { className: `root-cause-card ${tone || ""}`.trim() },
+    h("div", { className: "root-cause-label" }, title),
+    h("div", { className: "root-cause-value" }, value),
+    h("div", { className: "tiny" }, note)
+  );
+}
+
+function HealthRail({ snapshots }) {
+  if (!snapshots.length) {
+    return h("div", { className: "tiny" }, "No turn snapshots yet.");
+  }
+  return h(
+    "div",
+    { className: "health-rail" },
+    snapshots.map((item) =>
+      h(
+        "div",
+        {
+          key: `${item.turn_index}-${item.updated_at}`,
+          className: `health-segment ${statusClass(item.status)}`,
+          title: `Turn ${item.turn_index}: ${item.query}`,
+        },
+        h("span", null, item.turn_index)
+      )
+    )
   );
 }
 
@@ -139,7 +205,124 @@ function App() {
   const latestSnapshot = snapshots[snapshots.length - 1] || null;
   const report = detail?.report;
   const replay = detail?.replay;
+  const retrievals = detail?.retrievals;
+
   const metricSeries = (metric) => snapshots.map((item) => Number(item.metrics?.[metric] ?? 0));
+
+  const firstDegraded = useMemo(
+    () => snapshots.find((item) => statusClass(item.status) !== "pass") || null,
+    [snapshots]
+  );
+
+  const rootCauseCards = useMemo(() => {
+    const duplicateStep = replay?.issue_first_seen?.duplicate;
+    const contradictionStep = replay?.issue_first_seen?.contradiction;
+    const noisiestRecall = retrievals?.top_problematic_recalls?.[0] || retrievals?.top_token_pressure_recalls?.[0] || null;
+    return [
+      {
+        title: "First degradation",
+        value: firstDegraded ? `Turn ${firstDegraded.turn_index}` : "None",
+        note: firstDegraded ? firstDegraded.query : "No warning or fail snapshots yet.",
+        tone: firstDegraded ? statusClass(firstDegraded.status) : "",
+      },
+      {
+        title: "First duplicate",
+        value: duplicateStep ? `Step ${duplicateStep}` : "None",
+        note: duplicateStep ? "Replay flagged the first repeated memory state." : "No duplicate event observed.",
+        tone: duplicateStep ? "warn" : "",
+      },
+      {
+        title: "First contradiction",
+        value: contradictionStep ? `Step ${contradictionStep}` : "None",
+        note: contradictionStep ? "Replay flagged conflicting attribute values." : "No contradiction event observed.",
+        tone: contradictionStep ? "fail" : "",
+      },
+      {
+        title: "Most suspect recall",
+        value: noisiestRecall ? `Step ${noisiestRecall.step}` : "None",
+        note: noisiestRecall ? (noisiestRecall.query || noisiestRecall.kind) : "No problematic recall trace captured.",
+        tone: noisiestRecall?.likely_noisy ? "warn" : "",
+      },
+    ];
+  }, [firstDegraded, replay, retrievals]);
+
+  const incidentFeed = useMemo(() => {
+    const items = [];
+    (report?.findings || []).forEach((finding, index) => {
+      items.push({
+        key: `finding-${index}`,
+        kind: "threshold",
+        title: `${finding.metric} breached`,
+        body: finding.message,
+        severity: finding.severity === "error" ? "fail" : "warn",
+        status: finding.severity === "error" ? "FAIL" : "WARN",
+      });
+    });
+    if (firstDegraded) {
+      items.push({
+        key: `degrade-${firstDegraded.turn_index}`,
+        kind: "drift",
+        title: `Health shifted at turn ${firstDegraded.turn_index}`,
+        body: firstDegraded.query,
+        severity: statusClass(firstDegraded.status),
+        status: firstDegraded.status,
+        timestamp: firstDegraded.updated_at,
+      });
+    }
+    (retrievals?.top_problematic_recalls || []).slice(0, 3).forEach((trace) => {
+      items.push({
+        key: `recall-${trace.event_id}`,
+        kind: "retrieval",
+        title: trace.query || trace.kind,
+        body: `stale=${trace.stale} noisy=${trace.likely_noisy} latency=${formatMetric(trace.latency_ms)}ms`,
+        severity: trace.likely_noisy ? "warn" : "",
+        timestamp: trace.timestamp,
+      });
+    });
+    return items.slice(0, 8);
+  }, [firstDegraded, report, retrievals]);
+
+  const eventStream = useMemo(() => {
+    const items = [];
+    snapshots.forEach((item) => {
+      items.push({
+        key: `snapshot-${item.turn_index}-${item.updated_at}`,
+        timestamp: item.updated_at,
+        kind: "health",
+        title: `Turn ${item.turn_index} ${statusLabel(item.status)}`,
+        body: item.query,
+        severity: statusClass(item.status),
+        status: item.status,
+      });
+    });
+    (replay?.timeline || []).forEach((entry) => {
+      items.push({
+        key: `replay-${entry.step}-${entry.timestamp}`,
+        timestamp: entry.timestamp,
+        kind: entry.kind,
+        title: `Step ${entry.step} ${entry.summary}`,
+        body: entry.flags?.length ? `flags: ${entry.flags.join(", ")}` : entry.query || "",
+        severity: entry.flags?.includes("first_contradiction")
+          ? "fail"
+          : entry.flags?.includes("first_duplicate") || entry.flags?.includes("retrieval_miss")
+            ? "warn"
+            : "",
+      });
+    });
+    (retrievals?.traces || []).forEach((trace) => {
+      items.push({
+        key: `trace-${trace.event_id}`,
+        timestamp: trace.timestamp,
+        kind: "retrieval",
+        title: trace.query || trace.kind,
+        body: `latency=${formatMetric(trace.latency_ms)}ms stale=${trace.stale} noisy=${trace.likely_noisy}`,
+        severity: trace.likely_noisy ? "warn" : "",
+      });
+    });
+    return items
+      .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")))
+      .slice(0, 16);
+  }, [replay, retrievals, snapshots]);
 
   if (!overview.sessions.length) {
     return h("div", { className: "loading-state" }, "Waiting for MemFS Doctor session data...");
@@ -155,10 +338,14 @@ function App() {
         "div",
         { className: "brand" },
         h("div", { className: "brand-kicker" }, "MemFS Doctor"),
-        h("div", { className: "brand-title" }, "Agent Health"),
-        h("div", { className: "brand-subtitle" }, "CLI-native observability for Letta memory, replay, retrievals, and drift.")
+        h("div", { className: "brand-title" }, "AI Agent Observability"),
+        h(
+          "div",
+          { className: "brand-subtitle" },
+          "Telemetry, drift detection, replay, retrieval inspection, and root-cause analysis for persistent agent memory."
+        )
       ),
-      h("div", { className: "sidebar-section-title" }, "Sessions"),
+      h("div", { className: "sidebar-section-title" }, "Live sessions"),
       h(
         "div",
         { className: "session-list" },
@@ -184,100 +371,161 @@ function App() {
             null,
             h(
               "section",
-              { className: "hero" },
+              { className: "hero hero-obs" },
               h(
                 "div",
                 null,
+                h("div", { className: "hero-kicker" }, "Observability overview"),
                 h("h1", null, selectedSession),
                 h(
                   "p",
                   null,
-                  "Per-turn health snapshots stream in while Letta is running. Once the session is auto-finished, replay, report, and retrieval views are populated from the same stored events."
+                  "Track when agent memory health changes, inspect the event stream, and isolate the earliest signal of drift, poisoning, contradiction, or recall failure."
                 )
               ),
-              latestSnapshot
-                ? h("span", { className: `pill ${statusClass(latestSnapshot.status)}` }, statusLabel(latestSnapshot.status))
-                : h("span", { className: "pill" }, "NO SNAPSHOT")
+              h(
+                "div",
+                { className: "hero-pills" },
+                h("span", { className: "pill" }, `db ${overview.db_path || "-"}`),
+                h("span", { className: "pill" }, `snapshots ${overview.health_snapshot_count ?? 0}`),
+                latestSnapshot
+                  ? h("span", { className: `pill ${statusClass(latestSnapshot.status)}` }, statusLabel(latestSnapshot.status))
+                  : h("span", { className: "pill fail" }, "NO SNAPSHOT")
+              )
             ),
             h(
               "section",
               { className: "panel-grid" },
-              h(MetricPanel, {
-                title: "Turns Seen",
+              h(StatCard, {
+                title: "Turns observed",
                 value: snapshots.length,
-                caption: latestSnapshot?.query || "No turn snapshots yet",
+                caption: latestSnapshot?.query || "No health snapshots yet",
               }),
-              h(MetricPanel, {
-                title: "Writes",
-                value: latestSnapshot?.metrics?.write_count ?? report?.metrics?.write_count ?? 0,
-                caption: "Current write pressure",
+              h(StatCard, {
+                title: "Current writes",
+                value: formatMetric(latestSnapshot?.metrics?.write_count ?? report?.metrics?.write_count ?? 0, 0),
+                caption: "Writes in the latest observed state",
+                tone: (latestSnapshot?.metrics?.write_count ?? 0) > 0 ? "warn" : "",
               }),
-              h(MetricPanel, {
-                title: "Retrieval Latency",
-                value: latestSnapshot?.metrics?.retrieval_latency_ms_avg ?? report?.metrics?.retrieval_latency_ms_avg ?? 0,
-                caption: "Average ms",
+              h(StatCard, {
+                title: "Retrieval latency",
+                value: `${formatMetric(latestSnapshot?.metrics?.retrieval_latency_ms_avg ?? report?.metrics?.retrieval_latency_ms_avg ?? 0)}ms`,
+                caption: "Average retrieval response time",
+                tone: (latestSnapshot?.metrics?.retrieval_latency_ms_avg ?? 0) > 1500 ? "warn" : "",
               }),
-              h(MetricPanel, {
-                title: "Churn Rate",
-                value: latestSnapshot?.metrics?.memory_churn_rate ?? report?.metrics?.memory_churn_rate ?? 0,
-                caption: "Writes / total events",
+              h(StatCard, {
+                title: "Memory churn",
+                value: formatMetric(latestSnapshot?.metrics?.memory_churn_rate ?? report?.metrics?.memory_churn_rate ?? 0),
+                caption: "Writes divided by total events",
+                tone: (latestSnapshot?.metrics?.memory_churn_rate ?? 0) >= 0.4 ? "warn" : "",
               }),
               h(
                 "div",
                 { className: "panel span-8" },
-                h("div", { className: "panel-title" }, "Metric Trends"),
+                h("div", { className: "panel-title" }, "Health timeline"),
+                h(HealthRail, { snapshots }),
                 h(
                   "div",
-                  { className: "trend-grid" },
-                  h(TrendCard, {
-                    title: "Memory Churn",
-                    value: latestSnapshot?.metrics?.memory_churn_rate ?? 0,
-                    values: metricSeries("memory_churn_rate"),
-                    color: "#22d98b",
-                  }),
-                  h(TrendCard, {
-                    title: "Retrieval Latency",
-                    value: latestSnapshot?.metrics?.retrieval_latency_ms_avg ?? 0,
-                    values: metricSeries("retrieval_latency_ms_avg"),
-                    color: "#59d8ff",
-                  }),
-                  h(TrendCard, {
-                    title: "Duplicate Rate",
-                    value: latestSnapshot?.metrics?.duplicate_rate ?? 0,
-                    values: metricSeries("duplicate_rate"),
-                    color: "#ffbf47",
-                  }),
-                  h(TrendCard, {
-                    title: "Contradiction Score",
-                    value: latestSnapshot?.metrics?.contradiction_score ?? 0,
-                    values: metricSeries("contradiction_score"),
-                    color: "#ff5f56",
-                  })
+                  { className: "timeline-summary" },
+                  firstDegraded
+                    ? `First degradation observed at turn ${firstDegraded.turn_index}: ${firstDegraded.query}`
+                    : "No warning or fail states have been observed in this session."
                 )
               ),
               h(
                 "div",
                 { className: "panel span-4" },
-                h("div", { className: "panel-title" }, "Issue Summary"),
+                h("div", { className: "panel-title" }, "Incident feed"),
+                incidentFeed.length
+                  ? h("div", { className: "feed-list" }, incidentFeed.map((item) => h(FeedItem, { key: item.key, item })))
+                  : h("div", { className: "tiny" }, "No incidents or threshold breaches recorded yet.")
+              ),
+              h(
+                "div",
+                { className: "panel span-7" },
+                h("div", { className: "panel-title" }, "Signal trends"),
+                h(
+                  "div",
+                  { className: "trend-grid" },
+                  h(TrendCard, {
+                    title: "Memory churn",
+                    value: latestSnapshot?.metrics?.memory_churn_rate ?? 0,
+                    values: metricSeries("memory_churn_rate"),
+                    color: "#7dd3fc",
+                  }),
+                  h(TrendCard, {
+                    title: "Retrieval latency",
+                    value: latestSnapshot?.metrics?.retrieval_latency_ms_avg ?? 0,
+                    values: metricSeries("retrieval_latency_ms_avg"),
+                    color: "#c4b5fd",
+                  }),
+                  h(TrendCard, {
+                    title: "Duplicate rate",
+                    value: latestSnapshot?.metrics?.duplicate_rate ?? 0,
+                    values: metricSeries("duplicate_rate"),
+                    color: "#fbbf24",
+                  }),
+                  h(TrendCard, {
+                    title: "Contradiction score",
+                    value: latestSnapshot?.metrics?.contradiction_score ?? 0,
+                    values: metricSeries("contradiction_score"),
+                    color: "#f87171",
+                  })
+                )
+              ),
+              h(
+                "div",
+                { className: "panel span-5" },
+                h("div", { className: "panel-title" }, "Root cause map"),
+                h(
+                  "div",
+                  { className: "root-cause-grid" },
+                  rootCauseCards.map((item) =>
+                    h(RootCauseCard, {
+                      key: item.title,
+                      title: item.title,
+                      value: item.value,
+                      note: item.note,
+                      tone: item.tone,
+                    })
+                  )
+                )
+              ),
+              h(
+                "div",
+                { className: "panel span-8" },
+                h("div", { className: "panel-title" }, "Event stream"),
+                eventStream.length
+                  ? h("div", { className: "feed-list event-stream" }, eventStream.map((item) => h(FeedItem, { key: item.key, item })))
+                  : h("div", { className: "tiny" }, "No live or replay events available yet.")
+              ),
+              h(
+                "div",
+                { className: "panel span-4" },
+                h("div", { className: "panel-title" }, "Stored findings"),
                 report?.findings?.length
                   ? h(
                       "div",
-                      { className: "findings-list" },
+                      { className: "feed-list" },
                       report.findings.map((finding, index) =>
-                        h(
-                          "div",
-                          { key: `${finding.metric}-${index}`, className: "finding" },
-                          h("div", { className: "finding-title" }, `${finding.severity} / ${finding.metric}`),
-                          h("div", { className: "finding-body" }, finding.message)
-                        )
+                        h(FeedItem, {
+                          key: `${finding.metric}-${index}`,
+                          item: {
+                            kind: "health",
+                            title: `${finding.metric} ${finding.severity}`,
+                            body: finding.message,
+                            severity: finding.severity === "error" ? "fail" : "warn",
+                            status: finding.severity === "error" ? "FAIL" : "WARN",
+                          },
+                        })
                       )
                     )
-                  : h("div", { className: "tiny" }, "No threshold findings for this stored session yet.")
+                  : h("div", { className: "tiny" }, "No threshold findings for this stored session.")
               ),
               h(
                 "div",
                 { className: "panel span-12" },
-                h("div", { className: "panel-title" }, "Per-Turn Health Log"),
+                h("div", { className: "panel-title" }, "Per-turn health log"),
                 h(
                   "div",
                   { className: "snapshot-table" },
@@ -309,57 +557,15 @@ function App() {
                           h("td", null, item.turn_index),
                           h("td", null, item.query),
                           h("td", null, h("span", { className: `pill ${statusClass(item.status)}` }, statusLabel(item.status))),
-                          h("td", null, String(item.metrics.memory_churn_rate ?? 0)),
-                          h("td", null, String(item.metrics.retrieval_latency_ms_avg ?? 0)),
-                          h("td", null, String(item.metrics.duplicate_rate ?? 0)),
-                          h("td", null, item.updated_at)
+                          h("td", null, formatMetric(item.metrics.memory_churn_rate ?? 0)),
+                          h("td", null, formatMetric(item.metrics.retrieval_latency_ms_avg ?? 0)),
+                          h("td", null, formatMetric(item.metrics.duplicate_rate ?? 0)),
+                          h("td", null, formatTimestamp(item.updated_at))
                         )
                       )
                     )
                   )
                 )
-              ),
-              h(
-                "div",
-                { className: "panel span-6" },
-                h("div", { className: "panel-title" }, "Replay Entry Points"),
-                replay?.timeline?.length
-                  ? h(
-                      "div",
-                      { className: "replay-list" },
-                      replay.timeline.slice(-8).map((item) =>
-                        h(
-                          "div",
-                          { key: `${item.step}-${item.timestamp}`, className: "replay-item" },
-                          h("div", { className: "replay-step" }, `Step ${item.step} / ${item.kind}`),
-                          h("div", { className: "replay-body" }, item.summary)
-                        )
-                      )
-                    )
-                  : h("div", { className: "tiny" }, "Replay becomes available after the session is ingested.")
-              ),
-              h(
-                "div",
-                { className: "panel span-6" },
-                h("div", { className: "panel-title" }, "Retrieval Inspection"),
-                detail?.retrievals?.traces?.length
-                  ? h(
-                      "div",
-                      { className: "replay-list" },
-                      detail.retrievals.traces.slice(-6).map((trace) =>
-                        h(
-                          "div",
-                          { key: `${trace.step}-${trace.event_id}`, className: "replay-item" },
-                          h("div", { className: "replay-step" }, `Step ${trace.step} / ${trace.kind}`),
-                          h(
-                            "div",
-                            { className: "replay-body" },
-                            `${trace.query || "-"} | noisy=${trace.likely_noisy} | stale=${trace.stale}`
-                          )
-                        )
-                      )
-                    )
-                  : h("div", { className: "tiny" }, "No retrieval traces captured for this session.")
               )
             )
           )
@@ -368,4 +574,3 @@ function App() {
 }
 
 createRoot(document.getElementById("root")).render(h(App));
-

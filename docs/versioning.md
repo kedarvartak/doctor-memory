@@ -278,3 +278,25 @@ Reason:
 Next:
 - Add richer dashboard drill-downs for replay step inspection and retrieval causality.
 - Consider optional Prometheus or Grafana export once the local product UI is stable.
+
+## 2026-05-16 | v0.7.0-phase8-agent-observability
+
+Type: feature
+Summary: Reframed the local dashboard as an AI agent observability layer with a darker operations-style UI, incident feed, degradation timeline, event stream, and root-cause panels.
+
+Changes:
+- Reworked the dashboard frontend into an observability-oriented layout instead of a simple session inspector.
+- Added a per-session health rail to show state transitions across turns.
+- Added an incident feed that surfaces threshold breaches, degraded turns, and suspect recalls.
+- Added a unified event stream combining health snapshots, replay timeline entries, and retrieval traces.
+- Added root-cause cards for first degradation, first duplicate, first contradiction, and suspect recall.
+- Standardized the dashboard onto a fixed dark theme and removed the theme palette toggle.
+- Updated the roadmap to formalize this work as Phase 8: AI Agent Observability Layer.
+
+Reason:
+- The product direction moved beyond “visualize stored session data” into “help infra and agent developers debug where an LLM or memory system started going wrong.”
+- Observability requires timelines, incidents, and causal hints, not only charts and tables.
+
+Next:
+- Add drill-down navigation from dashboard incidents into step inspection and memory diffs.
+- Add multi-session trend aggregation and optional external telemetry export.

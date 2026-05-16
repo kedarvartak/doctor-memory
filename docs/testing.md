@@ -623,6 +623,36 @@ Manual validation:
 Pass condition:
 - dashboard views consume the same underlying session data produced by the CLI capture and reporting workflow
 
+## Manual Test 17: Agent Observability Dashboard
+
+Goal:
+- verify that the dashboard behaves like an observability surface, not only a static report viewer
+- verify that degradation and root-cause hints appear from the same stored session data as the CLI
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db dashboard
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db start-letta-capture --agent <agent-id>
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db record-letta-runtime \
+  --auto-finish \
+  -- letta
+```
+
+Manual validation:
+- open `http://127.0.0.1:8765`
+- confirm the selected session shows a health timeline rather than only a raw table
+- create a session with at least one retrieval and one memory write
+- introduce a degrading turn, such as a correction, conflicting fact, or noisy rewrite
+- confirm the incident feed surfaces the degraded turn or threshold breach
+- confirm the root-cause panel identifies the first degraded turn or other first-known issue markers
+- confirm the event stream reflects the same session progression visible through CLI replay and retrieval inspection
+
+Pass condition:
+- a developer can use the dashboard to see when the session degraded and what likely caused it, without leaving the UI first
+
 ## Manual Test Notes Template
 
 Use this template after each manual run:

@@ -272,6 +272,42 @@ This phase should not turn into a frontend-first rewrite. The dashboard is a pre
 
 - dashboard views consume the same report and replay data produced by CLI workflows
 
+## Phase 8: AI Agent Observability Layer
+
+### Objective
+
+Turn the dashboard from a local session viewer into a real observability surface for agent failure analysis.
+
+### Deliverables
+
+- operations-style observability dashboard
+- per-turn health timeline and state transitions
+- incident feed for threshold breaches, noisy recalls, and drift onset
+- event stream combining health snapshots, replay events, and retrieval traces
+- root-cause panels for first degradation, first duplicate, contradiction onset, and suspect recalls
+- developer-oriented views for spotting poisoning, hallucination precursors, and memory drift
+
+### What This Phase Should Answer
+
+- when did the agent first start degrading
+- which turn or replay step first surfaced drift
+- whether the likely problem was churn, contradiction, duplicate memory, or bad recall
+- what sequence of writes and retrievals preceded a bad answer
+- whether the issue looks session-local or systemic across stored memory behavior
+
+### Design Requirements
+
+- keep the dashboard tied to the same normalized storage and replay primitives as the CLI
+- optimize for debugging and triage, not just pretty charts
+- preserve a live-updating operational feel similar to infrastructure observability tools
+- make it easy to move from signal to cause, not only signal to graph
+
+### Exit Criteria
+
+- a developer can identify the first degradation point for a stored session from the dashboard
+- dashboard event streams and health timelines stay consistent with the CLI-backed session data
+- the UI supports real debugging of drift, poisoning, and recall quality rather than only static reporting
+
 ## Immediate Build Order
 
 The recommended order for the next implementation steps is:
