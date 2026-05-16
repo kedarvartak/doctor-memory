@@ -6,12 +6,33 @@ build-backend = "setuptools.build_meta"
 name = "memops"
 version = "0.1.0"
 description = "Observability and replay infrastructure for persistent AI memory systems."
-readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 authors = [
   { name = "Kedar Vartak" }
 ]
+keywords = ["ai", "agents", "observability", "memory", "replay", "retrieval", "monitoring"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Monitoring",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/kedarvartak/doctor-memory"
+Repository = "https://github.com/kedarvartak/doctor-memory"
+Issues = "https://github.com/kedarvartak/doctor-memory/issues"
+Documentation = "https://github.com/kedarvartak/doctor-memory/tree/main/docs"
 
 [project.scripts]
 memops = "memfs_doctor.cli.main:main"

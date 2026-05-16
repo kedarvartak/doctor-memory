@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="examples/banner.png" alt="MemOps banner">
+  <img src="https://raw.githubusercontent.com/kedarvartak/doctor-memory/main/examples/banner.png" alt="MemOps banner">
 </p>
 
 ## What MemOps Is
@@ -151,14 +151,21 @@ The main README is intentionally product-facing.
 
 For setup, CLI usage, capture workflows, testing procedures, and implementation history, use:
 
-- [docs/roadmap.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/roadmap.md)
-- [docs/testing.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/testing.md)
-- [docs/versioning.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/versioning.md)
+- [Roadmap](https://github.com/kedarvartak/doctor-memory/blob/main/docs/roadmap.md)
+- [Testing Guide](https://github.com/kedarvartak/doctor-memory/blob/main/docs/testing.md)
+- [Versioning Log](https://github.com/kedarvartak/doctor-memory/blob/main/docs/versioning.md)
+- [Publishing Guide](https://github.com/kedarvartak/doctor-memory/blob/main/docs/publish.md)
 
 Recommended local install:
 
 ```bash
 uv pip install -e .
+```
+
+Planned public install target:
+
+```bash
+uv pip install memops
 ```
 
 ## Development Philosophy

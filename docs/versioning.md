@@ -33,6 +33,25 @@ Next:
 
 ## Log
 
+## 2026-05-16 | v0.8.1-packaging-prep
+
+Type: chore
+Summary: Prepared MemOps for public package hosting with PyPI-facing metadata and a release guide.
+
+Changes:
+- Renamed the distribution and CLI brand to `memops` while keeping the internal Python package path stable.
+- Added PyPI-friendly metadata in `pyproject.toml`, including keywords, classifiers, and project URLs.
+- Updated `README.md` to use public GitHub links and a public banner URL instead of local file references.
+- Added `docs/publish.md` with a concrete `uv build` / `uv publish` workflow for future releases.
+
+Reason:
+- The project needed public-package metadata and documentation before it can be published and installed as a normal Python package.
+- Local-file README links and minimal package metadata were fine for repo use but not for a public package index.
+
+Next:
+- Publish an initial test release to TestPyPI.
+- Verify the rendered package page and install flow from a clean environment.
+
 ## 2026-05-15 | v0.1.0-docs-foundation
 
 Type: docs
