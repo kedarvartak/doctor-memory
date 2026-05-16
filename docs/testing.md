@@ -548,6 +548,52 @@ Expected result:
 Pass condition:
 - a developer can jump to a step, see memory state at that point, and explain what changed without manually replaying the full session
 
+### Manual Test 15: Phase 6 Health Checks And Regression Gates
+
+Goal:
+- use thresholded health checks and regression checks as a repeatable fail/pass workflow
+
+Suggested setup:
+1. ingest a stored trace into a scratch database
+2. run a session health check with default thresholds
+3. run the same report with a custom threshold file
+4. prepare a baseline and candidate pair, then run a regression check
+5. confirm non-zero exit codes are returned on failure
+
+Commands:
+
+```bash
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db init-db
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db ingest \
+  examples/letta_session.jsonl \
+  --framework letta
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db check-session \
+  --session session-001 \
+  --json
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-phase6.db report \
+  --session session-001 \
+  --thresholds examples/phase6_thresholds.json \
+  --json
+
+PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor-session.db check-regression \
+  --baseline <baseline-session-id> \
+  --candidate <candidate-session-id> \
+  --regression-thresholds examples/phase6_thresholds.json \
+  --json
+```
+
+Expected result:
+- `check-session` returns JSON with `status`, `exit_code`, `summary`, and full report payload
+- exit code is non-zero when threshold findings breach the configured fail policy
+- `report --thresholds ...` reflects the custom threshold file instead of only built-in defaults
+- `check-regression` returns JSON with regression findings and a non-zero exit code when candidate deltas exceed tolerance
+
+Pass condition:
+- a CI job can fail deterministically from session health or regression findings without custom wrapper logic
+
 ## Manual Test Notes Template
 
 Use this template after each manual run:

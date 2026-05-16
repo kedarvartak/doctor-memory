@@ -9,7 +9,17 @@ from memfs_doctor.adapters.letta import LettaTraceAdapter
 from memfs_doctor.core.metrics import compute_metrics
 from memfs_doctor.core.replay import diff_steps, inspect_step, replay_session
 from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
-from memfs_doctor.core.reporting import HealthReport, compare_reports, default_thresholds, evaluate_thresholds, export_report
+from memfs_doctor.core.reporting import (
+    HealthReport,
+    check_health_report,
+    check_regression_report,
+    compare_reports,
+    evaluate_regressions,
+    evaluate_thresholds,
+    export_report,
+    load_regression_rules,
+    load_threshold_rules,
+)
 from memfs_doctor.reports.render import (
     render_comparison_report,
     render_health_report,
@@ -108,14 +118,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_cmd = subparsers.add_parser("report", help="Generate a health report for a session.")
     report_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
+    report_cmd.add_argument("--thresholds", help="Optional JSON threshold config path.")
     report_cmd.add_argument("--json", action="store_true", help="Render report as JSON.")
     report_cmd.add_argument("--out", help="Optional path to export the report JSON.")
+
+    check_session_cmd = subparsers.add_parser("check-session", help="Fail with a non-zero exit code when a session breaches memory health thresholds.")
+    check_session_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
+    check_session_cmd.add_argument("--thresholds", help="Optional JSON threshold config path.")
+    check_session_cmd.add_argument("--fail-on", choices=["error", "warning"], default="error")
+    check_session_cmd.add_argument("--json", action="store_true", help="Render check result as JSON.")
+    check_session_cmd.add_argument("--out", help="Optional path to export the check result JSON.")
 
     compare_cmd = subparsers.add_parser("compare-sessions", help="Compare two session health reports.")
     compare_cmd.add_argument("--baseline", help="Baseline session identifier. Defaults to the second-latest stored session.")
     compare_cmd.add_argument("--candidate", help="Candidate session identifier. Defaults to the latest stored session.")
+    compare_cmd.add_argument("--regression-thresholds", help="Optional JSON regression threshold config path.")
     compare_cmd.add_argument("--json", action="store_true", help="Render comparison as JSON.")
     compare_cmd.add_argument("--out", help="Optional path to export the comparison JSON.")
+
+    check_regression_cmd = subparsers.add_parser("check-regression", help="Fail with a non-zero exit code when candidate memory health regresses beyond tolerance.")
+    check_regression_cmd.add_argument("--baseline", help="Baseline session identifier. Defaults to the second-latest stored session.")
+    check_regression_cmd.add_argument("--candidate", help="Candidate session identifier. Defaults to the latest stored session.")
+    check_regression_cmd.add_argument("--regression-thresholds", help="Optional JSON regression threshold config path.")
+    check_regression_cmd.add_argument("--fail-on", choices=["error", "warning"], default="error")
+    check_regression_cmd.add_argument("--json", action="store_true", help="Render check result as JSON.")
+    check_regression_cmd.add_argument("--out", help="Optional path to export the check result JSON.")
 
     retrieval_cmd = subparsers.add_parser("inspect-retrieval", help="Inspect retrieval causality and recall quality.")
     retrieval_cmd.add_argument("--session", help="Session identifier. Defaults to the latest stored session.")
@@ -370,10 +397,15 @@ def cmd_metrics(args: argparse.Namespace) -> int:
     return 0
 
 
-def _health_report_for_session(store: SQLiteEventStore, session_id: str) -> HealthReport:
+def _health_report_for_session(
+    store: SQLiteEventStore,
+    session_id: str,
+    *,
+    threshold_path: str | None = None,
+) -> HealthReport:
     events = _require_session_events(store, session_id)
     metrics = compute_metrics(events)
-    findings = evaluate_thresholds(metrics, default_thresholds())
+    findings = evaluate_thresholds(metrics, load_threshold_rules(threshold_path))
     retrievals = analyze_retrievals(events)
     return HealthReport.from_metrics(metrics, findings, problematic_recalls=top_problematic_recalls(retrievals.traces))
 
@@ -381,11 +413,25 @@ def _health_report_for_session(store: SQLiteEventStore, session_id: str) -> Heal
 def cmd_report(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
     resolved_session_id = _resolve_session_id(store, args.session)
-    report = _health_report_for_session(store, resolved_session_id)
+    report = _health_report_for_session(store, resolved_session_id, threshold_path=args.thresholds)
     if args.out:
         export_report(args.out, report.to_dict())
     print(render_health_report(report, as_json=args.json))
     return 0
+
+
+def cmd_check_session(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    resolved_session_id = _resolve_session_id(store, args.session)
+    report = _health_report_for_session(store, resolved_session_id, threshold_path=args.thresholds)
+    result = check_health_report(report, fail_on=args.fail_on)
+    if args.out:
+        export_report(args.out, result.to_dict())
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(result.summary)
+    return result.exit_code
 
 
 def cmd_compare_sessions(args: argparse.Namespace) -> int:
@@ -394,10 +440,39 @@ def cmd_compare_sessions(args: argparse.Namespace) -> int:
     baseline = _health_report_for_session(store, baseline_id)
     candidate = _health_report_for_session(store, candidate_id)
     comparison = compare_reports(baseline, candidate)
+    if args.regression_thresholds:
+        payload = {
+            **comparison.to_dict(),
+            "regression_findings": [
+                item.to_dict() for item in evaluate_regressions(comparison, load_regression_rules(args.regression_thresholds))
+            ],
+        }
+    else:
+        payload = comparison.to_dict()
     if args.out:
-        export_report(args.out, comparison.to_dict())
+        export_report(args.out, payload)
+    if args.json and args.regression_thresholds:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
     print(render_comparison_report(comparison, as_json=args.json))
     return 0
+
+
+def cmd_check_regression(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    baseline_id, candidate_id = _resolve_comparison_session_ids(store, args.baseline, args.candidate)
+    baseline = _health_report_for_session(store, baseline_id)
+    candidate = _health_report_for_session(store, candidate_id)
+    comparison = compare_reports(baseline, candidate)
+    findings = evaluate_regressions(comparison, load_regression_rules(args.regression_thresholds))
+    result = check_regression_report(comparison, findings, fail_on=args.fail_on)
+    if args.out:
+        export_report(args.out, result.to_dict())
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(result.summary)
+    return result.exit_code
 
 
 def cmd_inspect_retrieval(args: argparse.Namespace) -> int:
@@ -469,7 +544,9 @@ def main(argv: list[str] | None = None) -> int:
         "inspect": cmd_inspect,
         "metrics": cmd_metrics,
         "report": cmd_report,
+        "check-session": cmd_check_session,
         "compare-sessions": cmd_compare_sessions,
+        "check-regression": cmd_check_regression,
         "inspect-retrieval": cmd_inspect_retrieval,
         "replay": cmd_replay,
         "inspect-step": cmd_inspect_step,

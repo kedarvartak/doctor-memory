@@ -81,7 +81,41 @@ class CliDefaultsTests(unittest.TestCase):
             self.assertEqual(latest_one, ["session-002"])
             self.assertEqual(latest_two, ["session-002", "session-001"])
 
+    def test_stale_captures_are_ignored_and_pruned(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            workspace = home / "workspace"
+            workspace.mkdir()
+            state = LettaLocalState(home=home, workspace_root=workspace)
+
+            valid_memory_dir = home / ".letta" / "agents" / "agent-valid" / "memory"
+            valid_memory_dir.mkdir(parents=True)
+            missing_memory_dir = home / ".letta" / "agents" / "agent-missing" / "memory"
+
+            state.save_capture_for_test(
+                capture_id="letta-session:agent-missing:default:old",
+                agent_id="agent-missing",
+                memory_dir=missing_memory_dir,
+                base_head="abc",
+                started_at="2026-05-15T10:00:00+00:00",
+                conversation_id="default",
+            )
+            valid = state.save_capture_for_test(
+                capture_id="letta-session:agent-valid:default:new",
+                agent_id="agent-valid",
+                memory_dir=valid_memory_dir,
+                base_head="def",
+                started_at="2026-05-15T10:05:00+00:00",
+                conversation_id="default",
+            )
+
+            latest = state.latest_capture()
+            self.assertIsNotNone(latest)
+            self.assertEqual(latest.capture_id, valid.capture_id)
+            captures = state.list_captures(prune_missing=True)
+            self.assertEqual([item.capture_id for item in captures], [valid.capture_id])
+            self.assertFalse((state.captures_dir / "letta-session:agent-missing:default:old.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
-

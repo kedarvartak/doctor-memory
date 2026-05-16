@@ -107,6 +107,7 @@ class LettaTraceAdapter(BaseAdapter):
         capture = self.state.load_capture(capture_id)
         repo = capture.memory_dir
         if not repo.exists():
+            self.state.delete_capture(capture_id)
             raise AdapterError(f"Captured memory directory no longer exists: {repo}")
 
         ended_at = utc_now_iso()
@@ -135,7 +136,7 @@ class LettaTraceAdapter(BaseAdapter):
         return events
 
     def list_captures(self) -> list["LettaCapture"]:
-        return self.state.list_captures()
+        return self.state.list_captures(prune_missing=True)
 
     def latest_capture(self) -> "LettaCapture | None":
         return self.state.latest_capture()
@@ -449,16 +450,26 @@ class LettaLocalState:
         if path.exists():
             path.unlink()
 
-    def list_captures(self) -> list["LettaCapture"]:
+    def list_captures(self, *, prune_missing: bool = False) -> list["LettaCapture"]:
         if not self.captures_dir.exists():
             return []
         captures: list[LettaCapture] = []
         for path in sorted(self.captures_dir.glob("*.json")):
-            captures.append(LettaCapture.from_dict(json.loads(path.read_text(encoding="utf-8"))))
+            try:
+                capture = LettaCapture.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                if prune_missing:
+                    path.unlink(missing_ok=True)
+                continue
+            if not capture.memory_dir.exists():
+                if prune_missing:
+                    path.unlink(missing_ok=True)
+                continue
+            captures.append(capture)
         return captures
 
     def latest_capture(self) -> "LettaCapture | None":
-        captures = self.list_captures()
+        captures = self.list_captures(prune_missing=True)
         if not captures:
             return None
         captures.sort(key=lambda item: item.started_at, reverse=True)

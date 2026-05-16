@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/CLI-First-1F2937" alt="CLI First">
   <img src="https://img.shields.io/badge/SQLite-Trace%20Store-003B57?logo=sqlite&logoColor=white" alt="SQLite Trace Store">
   <img src="https://img.shields.io/badge/Letta-Adapter%20First-0F766E" alt="Letta Adapter First">
-  <img src="https://img.shields.io/badge/Status-Phase%205%20Implemented-15803D" alt="Status Phase 5 Implemented">
+  <img src="https://img.shields.io/badge/Status-Phase%206%20Implemented-15803D" alt="Status Phase 6 Implemented">
 </p>
 
 <p align="center">
@@ -91,6 +91,7 @@ These metrics are designed to run on stored traces, not only live sessions. That
 - retrieval-path inspection and problematic recall surfacing
 - step-by-step memory replay and snapshot diff inspection
 - offline replay from stored trace files without the SQLite store
+- CI-oriented health and regression checks with non-zero exit codes
 - JSON export suitable for downstream automation
 
 ## Who This Is For
@@ -242,6 +243,7 @@ The project has completed the first reporting-oriented milestone needed to make 
 - Phase 3: metrics, health reports, and session comparison
 - Phase 4: retrieval explainability and causal recall inspection
 - Phase 5: replay engine, step inspection, and offline snapshot diffing
+- Phase 6: alerts, regression checks, and CI hooks
 
 For details, see:
 

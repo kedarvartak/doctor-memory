@@ -42,6 +42,26 @@ class ThresholdFinding:
 
 
 @dataclass(slots=True)
+class RegressionRule:
+    metric: str
+    operator: str
+    warning_delta: float | int | None = None
+    error_delta: float | int | None = None
+
+
+@dataclass(slots=True)
+class RegressionFinding:
+    metric: str
+    severity: str
+    actual_delta: float | int
+    threshold: float | int
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class HealthReport:
     session_id: str
     framework: str
@@ -106,6 +126,24 @@ class ComparisonReport:
         }
 
 
+@dataclass(slots=True)
+class CheckResult:
+    kind: str
+    status: str
+    exit_code: int
+    summary: str
+    payload: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "status": self.status,
+            "exit_code": self.exit_code,
+            "summary": self.summary,
+            "payload": self.payload,
+        }
+
+
 def default_thresholds() -> list[ThresholdRule]:
     return [
         ThresholdRule(metric="retrieval_latency_ms_avg", operator=">=", warning=500, error=1500),
@@ -115,6 +153,19 @@ def default_thresholds() -> list[ThresholdRule]:
         ThresholdRule(metric="contradiction_score", operator=">=", warning=0.1, error=0.3),
         ThresholdRule(metric="stale_recall_rate", operator=">=", warning=0.2, error=0.5),
         ThresholdRule(metric="empty_retrieval_rate", operator=">=", warning=0.2, error=0.5),
+    ]
+
+
+def default_regression_thresholds() -> list[RegressionRule]:
+    return [
+        RegressionRule(metric="retrieval_latency_ms_avg", operator=">=", warning_delta=250, error_delta=1000),
+        RegressionRule(metric="context_pressure_score", operator=">=", warning_delta=50, error_delta=100),
+        RegressionRule(metric="memory_churn_rate", operator=">=", warning_delta=0.15, error_delta=0.3),
+        RegressionRule(metric="duplicate_rate", operator=">=", warning_delta=0.05, error_delta=0.15),
+        RegressionRule(metric="contradiction_score", operator=">=", warning_delta=0.05, error_delta=0.15),
+        RegressionRule(metric="stale_recall_rate", operator=">=", warning_delta=0.1, error_delta=0.25),
+        RegressionRule(metric="empty_retrieval_rate", operator=">=", warning_delta=0.1, error_delta=0.25),
+        RegressionRule(metric="memory_tokens_loaded_total", operator=">=", warning_delta=100, error_delta=500),
     ]
 
 
@@ -143,6 +194,39 @@ def evaluate_thresholds(metrics: MetricsReport, rules: list[ThresholdRule]) -> l
                     actual=value,
                     threshold=rule.warning,
                     message=f"{rule.metric} is {value} which breaches warning threshold {rule.warning}",
+                )
+            )
+    return findings
+
+
+def evaluate_regressions(report: ComparisonReport, rules: list[RegressionRule]) -> list[RegressionFinding]:
+    findings: list[RegressionFinding] = []
+    for rule in rules:
+        payload = report.deltas.get(rule.metric)
+        if not payload:
+            continue
+        delta = payload.get("delta")
+        if not isinstance(delta, (int, float)):
+            continue
+        if rule.error_delta is not None and _compare(delta, rule.operator, rule.error_delta):
+            findings.append(
+                RegressionFinding(
+                    metric=rule.metric,
+                    severity="error",
+                    actual_delta=delta,
+                    threshold=rule.error_delta,
+                    message=f"{rule.metric} regression delta is {delta} which breaches error threshold {rule.error_delta}",
+                )
+            )
+            continue
+        if rule.warning_delta is not None and _compare(delta, rule.operator, rule.warning_delta):
+            findings.append(
+                RegressionFinding(
+                    metric=rule.metric,
+                    severity="warning",
+                    actual_delta=delta,
+                    threshold=rule.warning_delta,
+                    message=f"{rule.metric} regression delta is {delta} which breaches warning threshold {rule.warning_delta}",
                 )
             )
     return findings
@@ -191,6 +275,87 @@ def export_report(path: str | Path, payload: dict[str, Any]) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return output
+
+
+def load_threshold_rules(path: str | Path | None = None) -> list[ThresholdRule]:
+    if path is None:
+        return default_thresholds()
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    rules_payload = payload["thresholds"] if isinstance(payload, dict) and "thresholds" in payload else payload
+    if not isinstance(rules_payload, list):
+        raise ValueError("Threshold config must be a list or an object containing 'thresholds'.")
+    return [
+        ThresholdRule(
+            metric=item["metric"],
+            operator=item["operator"],
+            warning=item.get("warning"),
+            error=item.get("error"),
+        )
+        for item in rules_payload
+    ]
+
+
+def load_regression_rules(path: str | Path | None = None) -> list[RegressionRule]:
+    if path is None:
+        return default_regression_thresholds()
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    rules_payload = payload["regressions"] if isinstance(payload, dict) and "regressions" in payload else payload
+    if not isinstance(rules_payload, list):
+        raise ValueError("Regression config must be a list or an object containing 'regressions'.")
+    return [
+        RegressionRule(
+            metric=item["metric"],
+            operator=item["operator"],
+            warning_delta=item.get("warning_delta"),
+            error_delta=item.get("error_delta"),
+        )
+        for item in rules_payload
+    ]
+
+
+def check_health_report(report: HealthReport, *, fail_on: str = "error") -> CheckResult:
+    if fail_on not in {"error", "warning"}:
+        raise ValueError("fail_on must be 'error' or 'warning'.")
+    has_error = any(item.severity == "error" for item in report.findings)
+    has_warning = any(item.severity == "warning" for item in report.findings)
+    failing = has_error or (fail_on == "warning" and has_warning)
+    summary = (
+        f"health check {report.status}: {len(report.findings)} finding(s) for session {report.session_id}"
+    )
+    return CheckResult(
+        kind="health",
+        status="fail" if failing else "pass",
+        exit_code=1 if failing else 0,
+        summary=summary,
+        payload=report.to_dict(),
+    )
+
+
+def check_regression_report(
+    report: ComparisonReport,
+    findings: list[RegressionFinding],
+    *,
+    fail_on: str = "error",
+) -> CheckResult:
+    if fail_on not in {"error", "warning"}:
+        raise ValueError("fail_on must be 'error' or 'warning'.")
+    has_error = any(item.severity == "error" for item in findings)
+    has_warning = any(item.severity == "warning" for item in findings)
+    failing = has_error or (fail_on == "warning" and has_warning)
+    summary = (
+        f"regression check {'fail' if failing else 'pass'}: {len(findings)} finding(s), "
+        f"{report.regression_count} regressed metric(s)"
+    )
+    return CheckResult(
+        kind="regression",
+        status="fail" if failing else "pass",
+        exit_code=1 if failing else 0,
+        summary=summary,
+        payload={
+            **report.to_dict(),
+            "regression_findings": [item.to_dict() for item in findings],
+        },
+    )
 
 
 def _compare(actual: float | int, operator: str, threshold: float | int) -> bool:

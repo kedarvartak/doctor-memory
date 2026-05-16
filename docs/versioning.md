@@ -236,3 +236,24 @@ Reason:
 Next:
 - Add more compact terminal rendering for large snapshots and diffs.
 - Introduce exportable replay artifacts if teams want to persist replay views separately from raw events.
+
+## 2026-05-16 | v0.5.0-phase6-ci-hooks
+
+Type: feature
+Summary: Added configurable memory-health checks, regression-policy evaluation, and CI-friendly non-zero exit workflows.
+
+Changes:
+- Expanded `memfs_doctor.core.reporting` with threshold-file loading, regression rules, regression findings, and check result models.
+- Added `check-session` and `check-regression` CLI commands with configurable fail policies and CI-friendly JSON output.
+- Extended `report` and `compare-sessions` to accept external threshold and regression policy files.
+- Added `examples/phase6_thresholds.json` as a starter config for health and regression tolerances.
+- Added automated tests for threshold config loading, health check exit behavior, and regression-policy evaluation.
+- Documented the manual Phase 6 workflow in `docs/testing.md`.
+
+Reason:
+- Phase 6 requires observability to drive engineering decisions, not only local inspection.
+- Teams need repeatable pass/fail signals when session memory health or baseline-vs-candidate behavior becomes unacceptable.
+
+Next:
+- Add richer policy controls for “session-local drift” versus “systemic memory corruption” classifications.
+- Consider machine-readable trend history across many runs, not only pairwise comparisons.

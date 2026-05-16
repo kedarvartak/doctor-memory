@@ -1,0 +1,66 @@
+{
+  "thresholds": [
+    {
+      "metric": "retrieval_latency_ms_avg",
+      "operator": ">=",
+      "warning": 500,
+      "error": 1500
+    },
+    {
+      "metric": "duplicate_rate",
+      "operator": ">=",
+      "warning": 0.1,
+      "error": 0.25
+    },
+    {
+      "metric": "contradiction_score",
+      "operator": ">=",
+      "warning": 0.1,
+      "error": 0.3
+    },
+    {
+      "metric": "context_pressure_score",
+      "operator": ">=",
+      "warning": 100,
+      "error": 250
+    },
+    {
+      "metric": "memory_churn_rate",
+      "operator": ">=",
+      "warning": 0.4,
+      "error": 0.7
+    }
+  ],
+  "regressions": [
+    {
+      "metric": "retrieval_latency_ms_avg",
+      "operator": ">=",
+      "warning_delta": 250,
+      "error_delta": 1000
+    },
+    {
+      "metric": "duplicate_rate",
+      "operator": ">=",
+      "warning_delta": 0.05,
+      "error_delta": 0.15
+    },
+    {
+      "metric": "contradiction_score",
+      "operator": ">=",
+      "warning_delta": 0.05,
+      "error_delta": 0.15
+    },
+    {
+      "metric": "context_pressure_score",
+      "operator": ">=",
+      "warning_delta": 50,
+      "error_delta": 100
+    },
+    {
+      "metric": "memory_churn_rate",
+      "operator": ">=",
+      "warning_delta": 0.1,
+      "error_delta": 0.2
+    }
+  ]
+}
