@@ -64,37 +64,61 @@ Instead of relying on intuition like "this run felt worse," it gives you a repea
 
 This makes memory behavior testable in the same way teams already test latency, correctness, and reliability.
 
-## What It Measures Today
+## How Memory Degradation Is Determined
 
-The current metrics layer focuses on early indicators of unhealthy memory behavior:
+MemFS Doctor does not decide that memory is degraded because one answer felt odd. It looks for measurable signs that the memory system is becoming unstable, inconsistent, ineffective, or slow.
 
-- `retrieval_latency_ms_avg`
-- `memory_tokens_loaded_total`
-- `context_pressure_score`
+The main parameters are:
+
 - `memory_churn_rate`
+  Too many writes or rewrites relative to total events. High churn often means unstable memory.
 - `duplicate_rate`
+  Repeated storage of the same fact or near-identical fact. This suggests noisy memory writing.
 - `contradiction_score`
+  Conflicting values for the same thing. This is one of the strongest poisoning or corruption signals.
 - `stale_recall_rate`
+  The agent keeps using outdated memory after newer information already exists.
 - `empty_retrieval_rate`
+  Retrieval happens, but useful memory does not come back.
+- `retrieval_latency_ms_avg`
+  Memory access becomes slower under pressure, often because retrieval quality or memory volume is getting worse.
+- `retrieval_count`
+  Helps judge whether the session actually exercised memory enough to trust the evaluation.
+- `write_count`
+  Raw memory mutation volume. Useful for understanding pressure and instability.
+- `context_pressure_score`
+  Indicates how much memory pressure is being pushed into the interaction.
+- `memory_tokens_loaded_total`
+  Measures how much memory payload is being dragged into the model.
 
-These metrics are designed to run on stored traces, not only live sessions. That matters because serious debugging and evaluation usually happens after a run, not during it.
+In practice, memory degradation usually shows up as one or more of these patterns rising:
 
-## Current Capabilities
+- instability
+- inconsistency
+- uselessness
+- slowness
 
-- normalized append-only memory event model
-- local SQLite-backed trace storage
-- deterministic snapshot reconstruction from events
-- terminal inspection, metrics, replay, and reporting flows
-- Letta session capture and runtime recording support
-- health reports with threshold findings
-- baseline-versus-candidate session comparison
-- retrieval-path inspection and problematic recall surfacing
-- step-by-step memory replay and snapshot diff inspection
-- offline replay from stored trace files without the SQLite store
-- CI-oriented health and regression checks with non-zero exit codes
-- JSON export suitable for downstream automation
-- local React dashboard backed by the same SQLite event store
-- per-turn health snapshots persisted during wrapped Letta sessions
+Single-session health is judged through configured thresholds. Baseline-versus-candidate health is judged through regression deltas. Together, those two views tell you whether the session stayed healthy, drifted, or became unsafe to trust.
+
+## What The Dashboard Is For
+
+The dashboard is meant to act like an observability layer for AI agents, not just a visual report.
+
+It is designed to help a developer answer:
+
+- when did the session first start degrading
+- whether the issue looked like drift, poisoning, contradiction, stale recall, or retrieval failure
+- which turn or replay step introduced the first suspicious change
+- what sequence of writes and retrievals happened before the bad behavior appeared
+- whether the issue looked session-local or systemic in the memory layer
+
+The current dashboard focuses on:
+
+- per-turn health timelines
+- trend charts for key memory signals
+- incident-style surfacing of threshold breaches and drift onset
+- replay-backed event streams
+- root-cause hints such as first degradation, first duplicate, first contradiction, and suspect recalls
 
 ## Who This Is For
 
@@ -103,151 +127,33 @@ These metrics are designed to run on stored traces, not only live sessions. That
 - researchers testing memory behavior under stress
 - anyone who needs more than transcripts to understand why an agent remembered, forgot, or slowed down
 
-## Installation
+## What Exists Today
 
-MemFS Doctor currently runs as a local Python package.
+MemFS Doctor already has a real working core:
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
+- normalized append-only memory events
+- local trace storage and replay
+- retrieval-path inspection
+- health thresholds and regression checks
+- baseline-versus-candidate comparison
+- dashboard-based observability for live and stored sessions
 
-Or run directly from the repository with:
+It is already useful for:
 
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --help
-```
+- local agent memory debugging
+- regression-oriented testing
+- stress testing retrieval quality
+- understanding where a persistent-memory agent first started going wrong
 
-Requirements:
+## Setup And Workflow Docs
 
-- Python `3.11+`
-- local access to the repository
-- Letta installed locally if you want to use the Letta capture workflow
+The main README is intentionally product-facing.
 
-## Quick Start
+For setup, CLI usage, capture workflows, testing procedures, and implementation history, use:
 
-Initialize a local database and inspect the CLI:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --help
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-agents
-```
-
-## Example Workflow
-
-Ingest a trace, inspect it, compute metrics, and replay the session:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor.db init-db
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor.db ingest examples/letta_session.jsonl --framework letta
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor.db inspect --session session-001
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor.db metrics --session session-001
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db /tmp/memfs-doctor.db replay --session session-001
-```
-
-## Real Letta Session Capture
-
-MemFS Doctor can capture real Letta sessions into the local event store.
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
-# run a real Letta conversation here
-PYTHONPATH=src python3 -m memfs_doctor.cli.main letta-captures
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture --capture-id <capture-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db sessions
-```
-
-If you already have a runtime JSONL trace with retrieval and miss events, merge it into the bounded session:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db finish-letta-capture \
-  --capture-id <capture-id> \
-  --runtime-trace <path-to-runtime-trace.jsonl>
-```
-
-## Wrapped Runtime Recording
-
-MemFS Doctor can also generate the runtime trace for a terminal Letta session automatically:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main start-letta-capture --agent <agent-id>
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db record-letta-runtime \
-  --capture-id <capture-id> \
-  --auto-finish \
-  -- letta
-```
-
-This wrapper:
-
-- runs the terminal Letta command
-- records transcript lines
-- infers retrieval and retrieval-miss events from the conversation flow
-- writes a runtime JSONL trace under `.memfs_doctor/runtime/`
-- persists per-turn health snapshots into SQLite while the session is still running
-- can auto-finish the bounded session into SQLite
-
-## Dashboard
-
-Start the local dashboard against the same database used for captures:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db dashboard
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8765
-```
-
-The dashboard is a React-based local observability surface that reads the same stored data produced by the CLI:
-
-- session list with live health state
-- per-turn health snapshots while Letta is still running
-- health timeline showing degradation state changes across turns
-- operations-style trend charts for churn, latency, duplicates, and contradictions
-- incident feed for threshold breaches, drift onset, and suspect recalls
-- event stream combining health snapshots, replay entries, and retrieval traces
-- root-cause panels for first degradation, duplicate onset, contradiction onset, and noisy recall clues
-
-## Health Reports And Regression Comparison
-
-Generate a per-session health report:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db report \
-  --session <session-id> \
-  --json
-```
-
-Compare a candidate run against a baseline:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db compare-sessions \
-  --baseline <baseline-session-id> \
-  --candidate <candidate-session-id> \
-  --json
-```
-
-This is the core evaluation loop for the product. A healthy baseline and a stressed or modified candidate should produce directionally correct differences in metrics such as retrieval latency, empty retrieval rate, and memory churn.
-
-Inspect retrieval causality and recall quality for a stored session:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
-  --session <session-id> \
-  --json
-```
-
-Inspect a single retrieval step:
-
-```bash
-PYTHONPATH=src python3 -m memfs_doctor.cli.main --db .memfs_doctor/session.db inspect-retrieval \
-  --session <session-id> \
-  --step <retrieval-step>
-```
+- [docs/roadmap.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/roadmap.md)
+- [docs/testing.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/testing.md)
+- [docs/versioning.md](/home/kedar/Desktop/Projects/doctor%20memory/docs/versioning.md)
 
 ## Development Philosophy
 
@@ -280,21 +186,14 @@ For details, see:
 - `docs/testing.md`
 - `docs/versioning.md`
 
-## Repository Structure
-
-```text
-src/memfs_doctor/
-  adapters/     framework-specific ingestion and capture
-  cli/          command-line entry points
-  core/         events, metrics, replay, snapshots, reporting
-  reports/      terminal and JSON rendering helpers
-  runtime/      runtime trace recording helpers
-  storage/      SQLite event store
-tests/          automated coverage
-docs/           roadmap, testing notes, version history
-examples/       sample traces and project assets
-```
-
 ## Current State
 
-This is a real product direction with an early but functional implementation. It is already useful for local session analysis and regression-oriented memory testing, especially in Letta-based workflows. The broader vision is larger than the current codebase, but the core loop of capture, measure, replay, and compare is now in place.
+This is a real product direction with an early but functional implementation. It already supports practical memory-health debugging, replay, regression comparison, and dashboard-based observability for Letta-oriented workflows.
+
+The broader vision is larger than the current codebase, but the core loop is already in place:
+
+- capture agent memory behavior
+- convert it into analyzable signals
+- detect degradation
+- surface first-cause clues
+- help developers improve the agent or memory system
