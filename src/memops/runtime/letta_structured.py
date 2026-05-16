@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from memfs_doctor.core.events import EventKind, utc_now_iso
-from memfs_doctor.runtime.letta_runtime import AGENT_ID_ENV, SESSION_ID_ENV, STRUCTURED_TRACE_PATH_ENV
+from memops.core.events import EventKind, utc_now_iso
+from memops.runtime.letta_runtime import AGENT_ID_ENV, SESSION_ID_ENV, STRUCTURED_TRACE_PATH_ENV
 
 
 def emit_structured_retrieval(

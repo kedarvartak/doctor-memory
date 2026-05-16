@@ -19,7 +19,7 @@ import traceback
 import tty
 from typing import Any
 
-from memfs_doctor.core.events import EventKind, MemoryEvent, utc_now_iso
+from memops.core.events import EventKind, MemoryEvent, utc_now_iso
 
 
 STRUCTURED_TRACE_PATH_ENV = "MEMFS_DOCTOR_STRUCTURED_TRACE_PATH"

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from memfs_doctor.core.events import EventKind, MemoryEvent
-from memfs_doctor.core.snapshots import build_snapshot, diff_snapshots
+from memops.core.events import EventKind, MemoryEvent
+from memops.core.snapshots import build_snapshot, diff_snapshots
 
 
 @dataclass(slots=True)

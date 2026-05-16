@@ -7,8 +7,8 @@ import subprocess
 from typing import Any
 from uuid import uuid4
 
-from memfs_doctor.adapters.base import AdapterError, BaseAdapter
-from memfs_doctor.core.events import EventKind, MemoryEvent, utc_now_iso
+from memops.adapters.base import AdapterError, BaseAdapter
+from memops.core.events import EventKind, MemoryEvent, utc_now_iso
 
 
 LETTA_KIND_MAP = {

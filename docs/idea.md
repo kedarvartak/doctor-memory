@@ -232,7 +232,7 @@ The codebase should be structured around a normalized memory event contract rath
 Suggested Python package direction:
 
 ```text
-memfs_doctor/
+memops/
   adapters/
     base.py
     letta/

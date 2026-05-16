@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from memfs_doctor.core.events import MemoryEvent, SessionRecord
+from memops.core.events import MemoryEvent, SessionRecord
 
 
 DEFAULT_DB_PATH = Path(".memfs_doctor") / "session.db"

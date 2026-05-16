@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from memfs_doctor.adapters.letta import LettaTraceAdapter
-from memfs_doctor.core.metrics import compute_metrics
-from memfs_doctor.core.replay import diff_steps, inspect_step, replay_session
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.adapters.letta import LettaTraceAdapter
+from memops.core.metrics import compute_metrics
+from memops.core.replay import diff_steps, inspect_step, replay_session
+from memops.storage.sqlite import SQLiteEventStore
 
 
 FIXTURE = Path(__file__).resolve().parent.parent / "examples" / "letta_session.jsonl"

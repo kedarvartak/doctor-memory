@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from memfs_doctor.core.events import EventKind, MemoryEvent
+from memops.core.events import EventKind, MemoryEvent
 
 
 LOW_SCORE_THRESHOLD = 0.8

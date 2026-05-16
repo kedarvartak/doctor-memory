@@ -5,12 +5,12 @@ import json
 from pathlib import Path
 import sys
 
-from memfs_doctor.adapters.letta import LettaTraceAdapter
-from memfs_doctor.core.metrics import compute_metrics
-from memfs_doctor.core.replay import diff_steps, inspect_step, replay_session
-from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
-from memfs_doctor.dashboard.server import create_dashboard_server
-from memfs_doctor.core.reporting import (
+from memops.adapters.letta import LettaTraceAdapter
+from memops.core.metrics import compute_metrics
+from memops.core.replay import diff_steps, inspect_step, replay_session
+from memops.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
+from memops.dashboard.server import create_dashboard_server
+from memops.core.reporting import (
     HealthReport,
     check_health_report,
     check_regression_report,
@@ -21,7 +21,7 @@ from memfs_doctor.core.reporting import (
     load_regression_rules,
     load_threshold_rules,
 )
-from memfs_doctor.reports.render import (
+from memops.reports.render import (
     render_comparison_report,
     render_health_report,
     render_metrics,
@@ -30,7 +30,7 @@ from memfs_doctor.reports.render import (
     render_step_inspection,
     render_sessions,
 )
-from memfs_doctor.runtime.letta_runtime import (
+from memops.runtime.letta_runtime import (
     LIVE_DEBUG_LOG_ENV,
     RecordedLine,
     default_runtime_trace_path,
@@ -42,7 +42,7 @@ from memfs_doctor.runtime.letta_runtime import (
     parse_transcript_turns,
     record_runtime_trace,
 )
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.storage.sqlite import SQLiteEventStore
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -88,11 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     record_letta_runtime.add_argument(
         "--trace-path",
-        help="Optional output path for the runtime JSONL trace. Defaults to .memfs_doctor/runtime/<capture-id>.jsonl",
+        help="Optional output path for the runtime JSONL trace. Defaults to .memops/runtime/<capture-id>.jsonl",
     )
     record_letta_runtime.add_argument(
         "--structured-trace-path",
-        help="Optional structured retrieval sidecar path. Defaults to .memfs_doctor/runtime/<capture-id>.structured.jsonl",
+        help="Optional structured retrieval sidecar path. Defaults to .memops/runtime/<capture-id>.structured.jsonl",
     )
     record_letta_runtime.add_argument(
         "--auto-finish",
@@ -113,11 +113,11 @@ def build_parser() -> argparse.ArgumentParser:
     chat_cmd.add_argument("--memory-dir", help="Explicit path to a Letta memory directory.")
     chat_cmd.add_argument(
         "--trace-path",
-        help="Optional output path for the runtime JSONL trace. Defaults to .memfs_doctor/runtime/<capture-id>.jsonl",
+        help="Optional output path for the runtime JSONL trace. Defaults to .memops/runtime/<capture-id>.jsonl",
     )
     chat_cmd.add_argument(
         "--structured-trace-path",
-        help="Optional structured retrieval sidecar path. Defaults to .memfs_doctor/runtime/<capture-id>.structured.jsonl",
+        help="Optional structured retrieval sidecar path. Defaults to .memops/runtime/<capture-id>.structured.jsonl",
     )
     chat_cmd.add_argument(
         "runtime_command",
@@ -172,6 +172,20 @@ def build_parser() -> argparse.ArgumentParser:
     compare_cmd.add_argument("--regression-thresholds", help="Optional JSON regression threshold config path.")
     compare_cmd.add_argument("--json", action="store_true", help="Render comparison as JSON.")
     compare_cmd.add_argument("--out", help="Optional path to export the comparison JSON.")
+
+    benchmark_cmd = subparsers.add_parser(
+        "benchmark",
+        aliases=["bench"],
+        help="Run an automated baseline-vs-candidate regression check directly from two trace files.",
+    )
+    benchmark_cmd.add_argument("--baseline-trace", required=True, help="Path to the baseline trace file.")
+    benchmark_cmd.add_argument("--candidate-trace", required=True, help="Path to the candidate trace file.")
+    benchmark_cmd.add_argument("--framework", default="letta", choices=["letta"], help="Trace framework.")
+    benchmark_cmd.add_argument("--thresholds", help="Optional JSON threshold config path for per-trace health evaluation.")
+    benchmark_cmd.add_argument("--regression-thresholds", help="Optional JSON regression threshold config path.")
+    benchmark_cmd.add_argument("--fail-on", choices=["error", "warning"], default="error")
+    benchmark_cmd.add_argument("--json", action="store_true", help="Render benchmark result as JSON.")
+    benchmark_cmd.add_argument("--out", help="Optional path to export the benchmark JSON.")
 
     check_regression_cmd = subparsers.add_parser("check-regression", aliases=["regress"], help="Fail with a non-zero exit code when candidate memory health regresses beyond tolerance.")
     check_regression_cmd.add_argument("--baseline", help="Baseline session identifier. Defaults to the second-latest stored session.")
@@ -577,6 +591,14 @@ def _health_report_from_events(events, *, threshold_path: str | None = None) -> 
     return HealthReport.from_metrics(metrics, findings, problematic_recalls=top_problematic_recalls(retrievals.traces))
 
 
+def _health_report_for_trace(path: str | Path, *, framework: str, threshold_path: str | None = None) -> HealthReport:
+    adapter = _load_adapter(framework)
+    events = adapter.load_events(path)
+    if not events:
+        raise SystemExit(f"No events found in trace file {path!r}")
+    return _health_report_from_events(events, threshold_path=threshold_path)
+
+
 def _load_recorded_lines(path: str | Path) -> list[RecordedLine]:
     lines: list[RecordedLine] = []
     for raw in Path(path).read_text(encoding="utf-8").splitlines():
@@ -679,6 +701,49 @@ def cmd_compare_sessions(args: argparse.Namespace) -> int:
         return 0
     print(render_comparison_report(comparison, as_json=args.json))
     return 0
+
+
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    baseline = _health_report_for_trace(
+        args.baseline_trace,
+        framework=args.framework,
+        threshold_path=args.thresholds,
+    )
+    candidate = _health_report_for_trace(
+        args.candidate_trace,
+        framework=args.framework,
+        threshold_path=args.thresholds,
+    )
+    comparison = compare_reports(baseline, candidate)
+    regression_findings = evaluate_regressions(comparison, load_regression_rules(args.regression_thresholds))
+    result = check_regression_report(comparison, regression_findings, fail_on=args.fail_on)
+    payload = {
+        "baseline_trace": str(Path(args.baseline_trace)),
+        "candidate_trace": str(Path(args.candidate_trace)),
+        "baseline_report": baseline.to_dict(),
+        "candidate_report": candidate.to_dict(),
+        "comparison": {
+            **comparison.to_dict(),
+            "regression_findings": [item.to_dict() for item in regression_findings],
+        },
+        "check": result.to_dict(),
+    }
+    if args.out:
+        export_report(args.out, payload)
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(result.summary)
+        print(f"Baseline trace: {args.baseline_trace}")
+        print(f"Candidate trace: {args.candidate_trace}")
+        print(f"Baseline status: {baseline.status}")
+        print(f"Candidate status: {candidate.status}")
+        print(f"Regressed metrics: {comparison.regression_count}")
+        if regression_findings:
+            print("Regression findings:")
+            for item in regression_findings:
+                print(f"- {item.metric}: {item.severity} delta={item.actual_delta} threshold={item.threshold}")
+    return result.exit_code
 
 
 def cmd_check_regression(args: argparse.Namespace) -> int:
@@ -785,6 +850,8 @@ def main(argv: list[str] | None = None) -> int:
         "gate": cmd_check_session,
         "compare-sessions": cmd_compare_sessions,
         "compare": cmd_compare_sessions,
+        "benchmark": cmd_benchmark,
+        "bench": cmd_benchmark,
         "check-regression": cmd_check_regression,
         "regress": cmd_check_regression,
         "inspect-retrieval": cmd_inspect_retrieval,

@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from memfs_doctor.core.metrics import MetricsReport
-from memfs_doctor.core.retrievals import RetrievalTrace
+from memops.core.metrics import MetricsReport
+from memops.core.retrievals import RetrievalTrace
 
 
 WORSE_WHEN_HIGHER = {

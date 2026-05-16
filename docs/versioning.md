@@ -33,6 +33,25 @@ Next:
 
 ## Log
 
+## 2026-05-16 | v0.8.2-automated-benchmark-runner
+
+Type: feature
+Summary: Added an automated baseline-vs-candidate benchmark command that runs regression checks directly from two trace files.
+
+Changes:
+- Added `memops benchmark` with the short alias `memops bench`.
+- Wired the benchmark flow to reuse existing health reporting, comparison, and regression-threshold logic.
+- Added automated test coverage proving a degraded candidate trace fails the benchmark with a non-zero exit code.
+- Documented the workflow in `docs/testing.md` as an offline automated evaluation path.
+
+Reason:
+- The project needed a repeatable automated baseline/candidate harness before broader framework comparisons such as Zep benchmarking.
+- Running directly from trace files makes regression testing easier to script and less dependent on SQLite setup.
+
+Next:
+- Add a Zep adapter so the same benchmark runner can evaluate Zep memory traces alongside Letta traces.
+- Add scenario manifests so multi-run benchmark suites can be executed in one command.
+
 ## 2026-05-16 | v0.8.1-packaging-prep
 
 Type: chore
@@ -79,11 +98,11 @@ Summary: Implemented the first working Python foundation for normalized memory t
 
 Changes:
 - Added Python packaging with a `src/` layout and a CLI entry surface for `init-db`, `ingest`, `sessions`, `inspect`, `metrics`, `replay`, and `diff`.
-- Implemented normalized event and session models in `memfs_doctor.core.events`.
-- Implemented snapshot reconstruction and memory-state diffs in `memfs_doctor.core.snapshots`.
-- Implemented first-pass memory health metrics in `memfs_doctor.core.metrics`, including duplicate rate, contradiction score, stale recall rate, retrieval latency, context pressure, and churn.
-- Implemented deterministic session replay helpers in `memfs_doctor.core.replay`.
-- Implemented an SQLite-backed append-only event store in `memfs_doctor.storage.sqlite`.
+- Implemented normalized event and session models in `memops.core.events`.
+- Implemented snapshot reconstruction and memory-state diffs in `memops.core.snapshots`.
+- Implemented first-pass memory health metrics in `memops.core.metrics`, including duplicate rate, contradiction score, stale recall rate, retrieval latency, context pressure, and churn.
+- Implemented deterministic session replay helpers in `memops.core.replay`.
+- Implemented an SQLite-backed append-only event store in `memops.storage.sqlite`.
 - Added a Letta trace adapter that ingests JSONL exports into the normalized schema.
 - Added a sample Letta session trace and unit tests covering ingestion, metrics, replay, and SQLite round-trip behavior.
 
@@ -142,7 +161,7 @@ Type: feature
 Summary: Added bounded start/finish session capture so real Letta activity can be ingested as a true session window instead of only full-history imports.
 
 Changes:
-- Added capture state storage in the project-local `.memfs_doctor/captures` directory.
+- Added capture state storage in the project-local `.memops/captures` directory.
 - Added `start-letta-capture`, `finish-letta-capture`, and `letta-captures` CLI commands.
 - Implemented incremental MemFS import bounded by the git head present at capture start.
 - Added automated coverage proving that only commits created after capture start are included in the resulting session.
@@ -182,9 +201,9 @@ Type: feature
 Summary: Added a wrapped Letta terminal recorder that generates runtime JSONL traces automatically and can auto-finish bounded captures.
 
 Changes:
-- Added `memfs_doctor.runtime.letta_runtime` for transcript capture, turn parsing, retrieval/miss inference, and JSONL trace writing.
+- Added `memops.runtime.letta_runtime` for transcript capture, turn parsing, retrieval/miss inference, and JSONL trace writing.
 - Added the `record-letta-runtime` CLI command with optional `--auto-finish`.
-- Implemented a default runtime trace output path under `.memfs_doctor/runtime/`.
+- Implemented a default runtime trace output path under `.memops/runtime/`.
 - Added tests for transcript parsing and runtime trace writing.
 - Verified an end-to-end wrapped fake Letta session where inferred retrieval and miss events were written and ingested into SQLite automatically.
 
@@ -202,7 +221,7 @@ Type: feature
 Summary: Implemented the Phase 3 reporting layer with health reports, threshold findings, and session-to-session regression comparison.
 
 Changes:
-- Added `memfs_doctor.core.reporting` with threshold rules, health reports, comparison reports, and JSON export helpers.
+- Added `memops.core.reporting` with threshold rules, health reports, comparison reports, and JSON export helpers.
 - Added `report` and `compare-sessions` CLI commands.
 - Added rendered outputs for health reports and comparison reports.
 - Added automated tests for threshold evaluation, report export, and regression comparison.
@@ -222,7 +241,7 @@ Type: feature
 Summary: Implemented the first retrieval explainability layer with causal recall inspection and report-level problematic recall surfacing.
 
 Changes:
-- Added `memfs_doctor.core.retrievals` for retrieval-path analysis, causal write linkage, and token-pressure ranking.
+- Added `memops.core.retrievals` for retrieval-path analysis, causal write linkage, and token-pressure ranking.
 - Added `inspect-retrieval` CLI command for session-level and step-level retrieval inspection.
 - Extended health reports to include top problematic recalls.
 - Added automated tests for retrieval causality and explainability output.
@@ -242,7 +261,7 @@ Type: feature
 Summary: Completed the first replay-oriented debugging layer with step inspection, richer snapshot diffs, and offline replay from trace files.
 
 Changes:
-- Expanded `memfs_doctor.core.replay` with structured replay timeline entries, step inspection, richer diff output, and final snapshot summary fields.
+- Expanded `memops.core.replay` with structured replay timeline entries, step inspection, richer diff output, and final snapshot summary fields.
 - Added `inspect-step` CLI command for step-by-step memory state inspection.
 - Extended `replay` and `diff` to work directly from trace files through `--trace-path`, not only from stored sessions.
 - Updated replay renderers and automated tests to cover timeline flags, snapshot deltas, and offline replay parity.
@@ -262,7 +281,7 @@ Type: feature
 Summary: Added configurable memory-health checks, regression-policy evaluation, and CI-friendly non-zero exit workflows.
 
 Changes:
-- Expanded `memfs_doctor.core.reporting` with threshold-file loading, regression rules, regression findings, and check result models.
+- Expanded `memops.core.reporting` with threshold-file loading, regression rules, regression findings, and check result models.
 - Added `check-session` and `check-regression` CLI commands with configurable fail policies and CI-friendly JSON output.
 - Extended `report` and `compare-sessions` to accept external threshold and regression policy files.
 - Added `examples/phase6_thresholds.json` as a starter config for health and regression tolerances.
@@ -283,9 +302,9 @@ Type: feature
 Summary: Added the first local dashboard layer with per-turn health snapshots, a lightweight HTTP service, and a React-based observability UI.
 
 Changes:
-- Extended `memfs_doctor.storage.sqlite` with a `health_snapshots` table for per-turn session health history.
+- Extended `memops.storage.sqlite` with a `health_snapshots` table for per-turn session health history.
 - Updated `record-letta-runtime` to persist live health snapshots into SQLite while wrapped Letta chats are still running.
-- Added `memfs_doctor.dashboard.service` and `memfs_doctor.dashboard.server` to expose dashboard-ready JSON views over sessions, reports, replay, and retrieval data.
+- Added `memops.dashboard.service` and `memops.dashboard.server` to expose dashboard-ready JSON views over sessions, reports, replay, and retrieval data.
 - Added a new `dashboard` CLI command that serves a local web UI.
 - Added a React-based dashboard frontend with session list, metric trend charts, issue panels, replay entry points, and per-turn health tables.
 - Added automated tests for snapshot storage and dashboard data composition.

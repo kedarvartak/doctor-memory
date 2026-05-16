@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 
-from memfs_doctor.core.events import SessionRecord
-from memfs_doctor.core.metrics import MetricsReport
-from memfs_doctor.core.replay import ReplayResult, StepInspection
-from memfs_doctor.core.retrievals import RetrievalInspectionReport
-from memfs_doctor.core.reporting import ComparisonReport, HealthReport
+from memops.core.events import SessionRecord
+from memops.core.metrics import MetricsReport
+from memops.core.replay import ReplayResult, StepInspection
+from memops.core.retrievals import RetrievalInspectionReport
+from memops.core.reporting import ComparisonReport, HealthReport
 
 
 def render_sessions(sessions: list[SessionRecord]) -> str:

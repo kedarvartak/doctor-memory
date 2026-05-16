@@ -7,11 +7,11 @@ import json
 from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
 
-from memfs_doctor.dashboard.service import DashboardService
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.dashboard.service import DashboardService
+from memops.storage.sqlite import SQLiteEventStore
 
 
-STATIC_PACKAGE = "memfs_doctor.dashboard.static"
+STATIC_PACKAGE = "memops.dashboard.static"
 
 
 def create_dashboard_server(host: str, port: int, *, store: SQLiteEventStore) -> ThreadingHTTPServer:

@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from memfs_doctor.core.events import EventKind
-from memfs_doctor.runtime.letta_structured import emit_structured_retrieval, emit_structured_retrieval_miss
-from memfs_doctor.runtime.letta_runtime import (
+from memops.core.events import EventKind
+from memops.runtime.letta_structured import emit_structured_retrieval, emit_structured_retrieval_miss
+from memops.runtime.letta_runtime import (
     AGENT_ID_ENV,
     SESSION_ID_ENV,
     STRUCTURED_TRACE_PATH_ENV,

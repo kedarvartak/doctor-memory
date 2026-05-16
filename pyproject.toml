@@ -35,7 +35,7 @@ Issues = "https://github.com/kedarvartak/doctor-memory/issues"
 Documentation = "https://github.com/kedarvartak/doctor-memory/tree/main/docs"
 
 [project.scripts]
-memops = "memfs_doctor.cli.main:main"
+memops = "memops.cli.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -44,4 +44,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"memfs_doctor.dashboard" = ["static/*"]
+"memops.dashboard" = ["static/*"]

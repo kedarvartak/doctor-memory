@@ -45,6 +45,8 @@ Common shortcuts:
   Compare two sessions
 - `memops regress`
   Run regression gate logic
+- `memops bench`
+  Run an automated baseline-vs-candidate regression check from two trace files
 - `memops retrieval`
   Inspect retrieval quality and causality
 - `memops timeline`
@@ -123,6 +125,7 @@ For the Phase 3 reporting path:
 
 - `report --session <id>` returns a health report with thresholds and findings
 - `compare-sessions --baseline <id> --candidate <id>` returns deltas and regression counts
+- `benchmark --baseline-trace <path> --candidate-trace <path>` runs the same regression logic directly from two trace files
 - report output can be exported as JSON artifacts
 - comparison output should flag worsened metrics such as higher duplicate rate or higher empty retrieval rate
 
@@ -356,10 +359,10 @@ memops agents
 memops capture --agent <agent-id>
 # run a real Letta session here that changes memory
 memops captures
-memops --db .memfs_doctor/session.db finish --capture-id <capture-id>
-memops --db .memfs_doctor/session.db runs
-memops --db .memfs_doctor/session.db session --session <session-id>
-memops --db .memfs_doctor/session.db timeline --session <session-id>
+memops --db .memops/session.db finish --capture-id <capture-id>
+memops --db .memops/session.db runs
+memops --db .memops/session.db session --session <session-id>
+memops --db .memops/session.db timeline --session <session-id>
 ```
 
 Suggested Letta session flow:
@@ -389,12 +392,12 @@ Commands:
 ```bash
 memops capture --agent <agent-id>
 # run a real Letta session here that causes at least one recall and one miss
-memops --db .memfs_doctor/session.db finish \
+memops --db .memops/session.db finish \
   --capture-id <capture-id> \
   --runtime-trace <path-to-runtime-trace.jsonl>
-memops --db .memfs_doctor/session.db session --session <session-id>
-memops --db .memfs_doctor/session.db stats --session <session-id> --json
-memops --db .memfs_doctor/session.db timeline --session <session-id>
+memops --db .memops/session.db session --session <session-id>
+memops --db .memops/session.db stats --session <session-id> --json
+memops --db .memops/session.db timeline --session <session-id>
 ```
 
 Suggested runtime trace contents:
@@ -424,10 +427,10 @@ Goal:
 Commands:
 
 ```bash
-memops --db .memfs_doctor/session.db chat -- letta
-memops --db .memfs_doctor/session.db session --session <session-id>
-memops --db .memfs_doctor/session.db stats --session <session-id> --json
-memops --db .memfs_doctor/session.db timeline --session <session-id>
+memops --db .memops/session.db chat -- letta
+memops --db .memops/session.db session --session <session-id>
+memops --db .memops/session.db stats --session <session-id> --json
+memops --db .memops/session.db timeline --session <session-id>
 ```
 
 Suggested Letta interaction:
@@ -437,7 +440,7 @@ Suggested Letta interaction:
 4. exit Letta cleanly
 
 Expected result:
-- a runtime trace file is written under `.memfs_doctor/runtime/`
+- a runtime trace file is written under `.memops/runtime/`
 - the stored session includes `memory_retrieved` and `memory_retrieval_miss`
 - `metrics` shows non-zero `retrieval_count`
 - `metrics` shows non-zero `empty_retrieval_rate`
@@ -465,7 +468,7 @@ Suggested Letta flow:
 Commands:
 
 ```bash
-memops --db .memfs_doctor/session.db health \
+memops --db .memops/session.db health \
   --session <session-id> \
   --json
 ```
@@ -492,7 +495,7 @@ Suggested setup:
 Commands:
 
 ```bash
-memops --db .memfs_doctor/session.db compare \
+memops --db .memops/session.db compare \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --json
@@ -519,11 +522,11 @@ Suggested setup:
 Commands:
 
 ```bash
-memops --db .memfs_doctor/session.db retrieval \
+memops --db .memops/session.db retrieval \
   --session <session-id> \
   --json
 
-memops --db .memfs_doctor/session.db retrieval \
+memops --db .memops/session.db retrieval \
   --session <session-id> \
   --step <retrieval-step>
 ```
@@ -611,7 +614,7 @@ memops --db /tmp/memops-phase6.db health \
   --thresholds examples/phase6_thresholds.json \
   --json
 
-memops --db .memfs_doctor/session.db regress \
+memops --db .memops/session.db regress \
   --baseline <baseline-session-id> \
   --candidate <candidate-session-id> \
   --regression-thresholds examples/phase6_thresholds.json \
@@ -626,6 +629,36 @@ Expected result:
 
 Pass condition:
 - a CI job can fail deterministically from session health or regression findings without custom wrapper logic
+
+### Manual Test 15B: Automated Baseline And Candidate Benchmark
+
+Goal:
+- verify that a baseline and candidate trace can be compared automatically without first ingesting them into SQLite
+
+Suggested setup:
+1. create or export one baseline trace that represents stable memory behavior
+2. create or export one candidate trace that includes a worse retrieval or noisier memory mutation pattern
+3. run the benchmark command against both trace files
+4. confirm the candidate fails when regression thresholds are breached
+
+Commands:
+
+```bash
+memops bench \
+  --baseline-trace <baseline-trace.jsonl> \
+  --candidate-trace <candidate-trace.jsonl> \
+  --regression-thresholds examples/phase6_thresholds.json \
+  --json
+```
+
+Expected result:
+- output contains `baseline_report`, `candidate_report`, `comparison`, and `check`
+- `comparison.regressions` lists all directionally worse metrics
+- `comparison.regression_findings` lists only metrics that breach configured regression policy
+- command exits non-zero when the candidate degrades beyond tolerance
+
+Pass condition:
+- the same trace pair can be re-run repeatedly and produce stable pass/fail regression judgments
 
 ## Manual Test 16: Dashboard Foundation
 
@@ -663,11 +696,11 @@ Goal:
 Commands:
 
 ```bash
-memops --db .memfs_doctor/session.db dash
+memops --db .memops/session.db dash
 
-memops --db .memfs_doctor/session.db capture --agent <agent-id>
+memops --db .memops/session.db capture --agent <agent-id>
 
-memops --db .memfs_doctor/session.db chat -- letta
+memops --db .memops/session.db chat -- letta
 ```
 
 Manual validation:

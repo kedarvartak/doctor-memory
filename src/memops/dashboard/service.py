@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from memfs_doctor.core.metrics import compute_metrics
-from memfs_doctor.core.replay import replay_session
-from memfs_doctor.core.reporting import HealthReport, evaluate_thresholds, load_threshold_rules
-from memfs_doctor.core.retrievals import analyze_retrievals, top_problematic_recalls
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.core.metrics import compute_metrics
+from memops.core.replay import replay_session
+from memops.core.reporting import HealthReport, evaluate_thresholds, load_threshold_rules
+from memops.core.retrievals import analyze_retrievals, top_problematic_recalls
+from memops.storage.sqlite import SQLiteEventStore
 
 
 @dataclass(slots=True)

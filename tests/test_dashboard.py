@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from memfs_doctor.adapters.letta import LettaTraceAdapter
-from memfs_doctor.dashboard.service import DashboardService
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.adapters.letta import LettaTraceAdapter
+from memops.dashboard.service import DashboardService
+from memops.storage.sqlite import SQLiteEventStore
 
 
 FIXTURE = Path(__file__).resolve().parent.parent / "examples" / "letta_session.jsonl"

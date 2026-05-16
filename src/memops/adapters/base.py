@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from memfs_doctor.core.events import MemoryEvent
+from memops.core.events import MemoryEvent
 
 
 class AdapterError(RuntimeError):

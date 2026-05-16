@@ -1,7 +1,7 @@
 <h1 align="center">MemOps</h1>
 
 <p align="center">
-  Observability, replay, and regression analysis for persistent AI memory systems.
+  Observability and regression analysis for persistent AI memory systems.
 </p>
 
 <p align="center">
@@ -16,145 +16,154 @@
   <img src="https://raw.githubusercontent.com/kedarvartak/doctor-memory/main/examples/banner.png" alt="MemOps banner">
 </p>
 
-## What MemOps Is
+## What Is MemOps?
 
-MemOps is a Python-first developer tool for inspecting, measuring, and comparing the memory behavior of AI agents that persist information across sessions.
+MemOps is an observability and regression analysis toolkit for persistent AI memory systems.
 
-The product exists to answer a practical problem: once an agent has memory, it can fail in subtle ways that are hard to diagnose. It may retrieve nothing when it should remember, retrieve the wrong thing, rewrite memory too aggressively, carry stale facts forward, or become slow under memory pressure. Most teams can feel these problems during testing, but they lack a durable way to capture what happened, replay it, and compare one run against another.
+It captures memory activity from AI agents, reconstructs session history, computes memory-health metrics, and detects regressions between runs.
 
-MemOps is built to close that gap. It turns raw memory activity into a normalized event stream, stores it locally, reconstructs session history, computes memory-health metrics, and produces reports that make baseline-versus-candidate evaluation concrete.
+The project is currently CLI-first and Letta-first, with a framework-neutral event architecture designed for future adapters.
 
-## Why This Product Exists
+## Why It Exists
 
-Traditional observability stacks are strong at API latency, logs, and infrastructure health. They are weak at answering memory-specific questions for agent systems:
+Persistent agents can degrade in ways normal infra dashboards do not explain:
 
-- Why did the agent miss a fact it should have known?
-- Did retrieval quality get worse after a prompt or runtime change?
-- Is the agent rewriting memory too often?
-- Are memory recalls slow, empty, noisy, or stale?
-- Did the latest candidate regress against the previous known-good behavior?
+- retrieval becomes empty, stale, or noisy
+- memory rewrites become unstable
+- duplicate or contradictory facts accumulate
+- token pressure and latency rise over time
+- candidate runs quietly regress against known-good baselines
 
-MemOps treats agent memory as a system that deserves the same rigor as any other production subsystem. The goal is not only to collect traces, but to make those traces actionable for debugging, evaluation, and release decisions.
+MemOps turns those failures into inspectable signals, replayable traces, and regression reports.
 
-## Product Goal
+## Core Capabilities
 
-The long-term goal is to become a practical observability layer for persistent AI memory:
+| Capability | Description |
+|------------|-------------|
+| Event Capture | Collects normalized memory events from agent frameworks |
+| Session Replay | Reconstructs memory evolution step-by-step |
+| Health Metrics | Computes stability, retrieval, and memory-pressure metrics |
+| Regression Analysis | Compares baseline vs candidate memory behavior |
+| Retrieval Inspection | Surfaces stale, noisy, and token-heavy recalls |
+| Local Trace Store | Uses SQLite-backed append-only event storage |
+| Dashboard | Exposes session timelines, incident signals, and root-cause hints |
+| Adapter Model | Keeps the core framework-neutral and Letta-first |
 
-- capture memory activity from real agent frameworks
-- normalize events into a framework-neutral schema
-- replay memory evolution across a session
-- score memory health with stable metrics
-- compare baseline and candidate runs for regressions
-- help developers explain why memory behavior changed
+## Memory Evaluation Pipeline
 
-The current implementation is CLI-first and Letta-first by design. That keeps the product grounded in real workflows before expanding into broader adapters or a dedicated dashboard.
+```text
+Agent Runtime
+      ↓
+Memory Event Capture
+      ↓
+Normalized Event Store
+      ↓
+Session Replay Engine
+      ↓
+Health Metric Computation
+      ↓
+Regression Detection
+      ↓
+Developer Reports + Dashboard
+```
 
-## Core Idea
+## Memory Health Metrics
 
-MemOps sits between raw framework behavior and developer judgment.
+| Metric | What It Detects | Why It Matters |
+|--------|------------------|----------------|
+| `memory_churn_rate` | Excessive rewrites | Signals unstable memory behavior |
+| `duplicate_rate` | Repeated or near-identical facts | Indicates noisy storage |
+| `contradiction_score` | Conflicting memory values | Strong corruption or poisoning signal |
+| `stale_recall_rate` | Outdated recall usage | Causes incorrect or misleading answers |
+| `empty_retrieval_rate` | Retrieval attempts with no useful memory | Means memory exists but is not usable |
+| `retrieval_latency_ms_avg` | Slow memory access | Suggests scaling or retrieval-quality problems |
+| `retrieval_count` | How much the session exercised memory | Helps judge confidence in the run |
+| `write_count` | Raw mutation volume | Exposes write pressure and instability |
+| `context_pressure_score` | Excess memory load in context | Increases model confusion risk |
+| `memory_tokens_loaded_total` | Total memory payload injected into the model | Can degrade reasoning quality |
 
-Instead of relying on intuition like "this run felt worse," it gives you a repeatable pipeline:
+## Regression Analysis
 
-1. Capture or ingest a real session trace.
-2. Store the trace as normalized append-only memory events.
-3. Reconstruct what the memory state looked like over time.
-4. Compute memory-health metrics for the session.
-5. Generate a report with threshold findings.
-6. Compare two sessions to surface regressions.
+MemOps supports baseline-vs-candidate evaluation for persistent-memory systems.
 
-This makes memory behavior testable in the same way teams already test latency, correctness, and reliability.
+It can:
 
-## How Memory Degradation Is Determined
+- compare two stored sessions
+- compare two trace files directly
+- apply thresholded regression policies
+- return non-zero exit codes for CI and automated benchmarks
 
-MemOps does not decide that memory is degraded because one answer felt odd. It looks for measurable signs that the memory system is becoming unstable, inconsistent, ineffective, or slow.
+This is the main loop for validating memory-policy changes, retrieval changes, adapter changes, and cross-agent benchmarking.
 
-The main parameters are:
+## Example Findings
 
-- `memory_churn_rate`
-  Too many writes or rewrites relative to total events. High churn often means unstable memory.
-- `duplicate_rate`
-  Repeated storage of the same fact or near-identical fact. This suggests noisy memory writing.
-- `contradiction_score`
-  Conflicting values for the same thing. This is one of the strongest poisoning or corruption signals.
-- `stale_recall_rate`
-  The agent keeps using outdated memory after newer information already exists.
-- `empty_retrieval_rate`
-  Retrieval happens, but useful memory does not come back.
-- `retrieval_latency_ms_avg`
-  Memory access becomes slower under pressure, often because retrieval quality or memory volume is getting worse.
-- `retrieval_count`
-  Helps judge whether the session actually exercised memory enough to trust the evaluation.
-- `write_count`
-  Raw memory mutation volume. Useful for understanding pressure and instability.
-- `context_pressure_score`
-  Indicates how much memory pressure is being pushed into the interaction.
-- `memory_tokens_loaded_total`
-  Measures how much memory payload is being dragged into the model.
+### Example Regression Output
 
-In practice, memory degradation usually shows up as one or more of these patterns rising:
+| Metric | Baseline | Candidate | Delta |
+|--------|----------|-----------|-------|
+| `contradiction_score` | `0.03` | `0.27` | `+0.24` |
+| `stale_recall_rate` | `0.04` | `0.21` | `+0.17` |
+| `retrieval_latency_ms_avg` | `112ms` | `391ms` | `+279ms` |
+| `memory_churn_rate` | `0.18` | `0.46` | `+0.28` |
 
-- instability
-- inconsistency
-- uselessness
-- slowness
+Result: regression detected.
 
-Single-session health is judged through configured thresholds. Baseline-versus-candidate health is judged through regression deltas. Together, those two views tell you whether the session stayed healthy, drifted, or became unsafe to trust.
+### Example Debug Questions
 
-## What The Dashboard Is For
+MemOps is designed to answer questions like:
 
-The dashboard is meant to act like an observability layer for AI agents, not just a visual report.
+- Which turn first pushed the session from healthy to warning?
+- Which write introduced the contradiction?
+- Which retrieval loaded stale memory?
+- Did a candidate memory policy reduce churn or make it worse?
+- Did the agent fail because of session drift or because the memory layer itself degraded?
 
-It is designed to help a developer answer:
+## Current Status
 
-- when did the session first start degrading
-- whether the issue looked like drift, poisoning, contradiction, stale recall, or retrieval failure
-- which turn or replay step introduced the first suspicious change
-- what sequence of writes and retrievals happened before the bad behavior appeared
-- whether the issue looked session-local or systemic in the memory layer
-
-The current dashboard focuses on:
-
-- per-turn health timelines
-- trend charts for key memory signals
-- incident-style surfacing of threshold breaches and drift onset
-- replay-backed event streams
-- root-cause hints such as first degradation, first duplicate, first contradiction, and suspect recalls
-
-## Who This Is For
-
-- teams building agents with persistent memory
-- developers evaluating retrieval quality across changes
-- researchers testing memory behavior under stress
-- anyone who needs more than transcripts to understand why an agent remembered, forgot, or slowed down
-
-## What Exists Today
-
-MemOps already has a real working core:
+MemOps already supports:
 
 - normalized append-only memory events
-- local trace storage and replay
+- local trace storage and deterministic replay
 - retrieval-path inspection
 - health thresholds and regression checks
-- baseline-versus-candidate comparison
-- dashboard-based observability for live and stored sessions
+- baseline-vs-candidate comparison
+- per-turn health snapshots
+- a local dashboard for observability and root-cause inspection
 
 It is already useful for:
 
 - local agent memory debugging
 - regression-oriented testing
 - stress testing retrieval quality
-- understanding where a persistent-memory agent first started going wrong
+- detecting when a long-lived agent starts drifting or poisoning itself
 
-## Setup And Workflow Docs
+## Roadmap
 
-The main README is intentionally product-facing.
+- Phase 1: core event model and local storage
+- Phase 2: Letta adapter MVP and capture workflow
+- Phase 3: metrics, health reports, and session comparison
+- Phase 4: retrieval explainability and causal recall inspection
+- Phase 5: replay engine, step inspection, and offline snapshot diffing
+- Phase 6: alerts, regression checks, and CI hooks
+- Phase 7: local dashboard foundation for memory observability
+- Phase 8: AI agent observability layer for drift, poisoning, and root-cause debugging
 
-For setup, CLI usage, capture workflows, testing procedures, and implementation history, use:
+Detailed docs:
 
 - [Roadmap](https://github.com/kedarvartak/doctor-memory/blob/main/docs/roadmap.md)
 - [Testing Guide](https://github.com/kedarvartak/doctor-memory/blob/main/docs/testing.md)
 - [Versioning Log](https://github.com/kedarvartak/doctor-memory/blob/main/docs/versioning.md)
 - [Publishing Guide](https://github.com/kedarvartak/doctor-memory/blob/main/docs/publish.md)
+
+## Philosophy
+
+MemOps is being built as serious infrastructure for memory systems:
+
+- CLI-first before platform-heavy
+- framework-neutral at the core
+- replayable before abstract
+- metrics-driven rather than intuition-driven
+- test-gated at every phase
 
 Recommended local install:
 
@@ -167,46 +176,3 @@ Planned public install target:
 ```bash
 uv pip install memops
 ```
-
-## Development Philosophy
-
-MemOps is being built with a narrow, deliberate scope:
-
-- Python-first
-- framework-neutral at the core
-- Letta-first as the initial adapter
-- local and inspectable before distributed and abstract
-- test-gated at every phase
-
-The project treats testing as a product requirement, not a cleanup step. Manual and automated validation expectations live in `docs/testing.md`.
-
-## Roadmap Status
-
-The project has completed the first reporting-oriented milestone needed to make memory behavior measurable:
-
-- Phase 1: core event model and local storage
-- Phase 2: Letta adapter MVP and capture workflow
-- Phase 3: metrics, health reports, and session comparison
-- Phase 4: retrieval explainability and causal recall inspection
-- Phase 5: replay engine, step inspection, and offline snapshot diffing
-- Phase 6: alerts, regression checks, and CI hooks
-- Phase 7: local dashboard foundation for memory observability
-- Phase 8: AI agent observability layer for drift, poisoning, and root-cause debugging
-
-For details, see:
-
-- `docs/roadmap.md`
-- `docs/testing.md`
-- `docs/versioning.md`
-
-## Current State
-
-This is a real product direction with an early but functional implementation. It already supports practical memory-health debugging, replay, regression comparison, and dashboard-based observability for Letta-oriented workflows.
-
-The broader vision is larger than the current codebase, but the core loop is already in place:
-
-- capture agent memory behavior
-- convert it into analyzable signals
-- detect degradation
-- surface first-cause clues
-- help developers improve the agent or memory system

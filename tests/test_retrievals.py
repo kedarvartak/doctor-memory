@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from memfs_doctor.adapters.letta import LettaTraceAdapter
-from memfs_doctor.core.events import EventKind, MemoryEvent
-from memfs_doctor.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
+from memops.adapters.letta import LettaTraceAdapter
+from memops.core.events import EventKind, MemoryEvent
+from memops.core.retrievals import analyze_retrievals, retrieval_trace_for_step, top_problematic_recalls
 
 
 FIXTURE = Path(__file__).resolve().parent.parent / "examples" / "letta_session.jsonl"

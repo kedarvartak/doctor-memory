@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from memfs_doctor.adapters.letta import LettaLocalState, LettaTraceAdapter
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.adapters.letta import LettaLocalState, LettaTraceAdapter
+from memops.storage.sqlite import SQLiteEventStore
 
 
 class CliDefaultsTests(unittest.TestCase):

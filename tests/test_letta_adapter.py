@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from memfs_doctor.adapters.letta.adapter import LettaLocalState, LettaTraceAdapter
-from memfs_doctor.core.metrics import compute_metrics
-from memfs_doctor.storage.sqlite import SQLiteEventStore
+from memops.adapters.letta.adapter import LettaLocalState, LettaTraceAdapter
+from memops.core.metrics import compute_metrics
+from memops.storage.sqlite import SQLiteEventStore
 
 
 def run_git(repo: Path, *args: str) -> str:
